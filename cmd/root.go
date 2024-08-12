@@ -10,6 +10,11 @@ import (
 	"sync"
 	"syscall"
 
+	"github.com/devopsext/detector/common"
+	"github.com/devopsext/detector/notifier"
+	"github.com/devopsext/detector/observer"
+	"github.com/devopsext/detector/source"
+	"github.com/devopsext/detector/verifier"
 	sreCommon "github.com/devopsext/sre/common"
 	sreProvider "github.com/devopsext/sre/provider"
 	"github.com/devopsext/utils"
@@ -51,6 +56,22 @@ var prometheusMetricsOptions = sreProvider.PrometheusOptions{
 	URL:    envGet("PROMETHEUS_METRICS_URL", "/metrics").(string),
 	Listen: envGet("PROMETHEUS_METRICS_LISTEN", ":8080").(string),
 	Prefix: envGet("PROMETHEUS_METRICS_PREFIX", "").(string),
+}
+
+var sourceConfig = source.ConfigOptions{
+	Path: envGet("SOURCE_CONFIG_PATH", "").(string),
+}
+
+var observerDatadog = observer.DatadogOptions{
+	URL: envGet("OBSERVER_DATADOG_URL", "").(string),
+}
+
+var verifierHttp = verifier.HttpOptions{
+	URL: envGet("VERIFIER_HTTP_URL", "").(string),
+}
+
+var notifierSlack = notifier.SlackOptions{
+	Token: envGet("NOTIFIER_SLACK_URL", "").(string),
 }
 
 /*var dSignalOptions = discovery.SignalOptions{
@@ -180,11 +201,19 @@ func Execute() {
 		},
 		Run: func(cmd *cobra.Command, args []string) {
 
-			//obs := common.NewObservability(logs, metrics)
-			//logger := obs.Logs()
+			obs := common.NewObservability(logs, metrics)
 
-			//sinks := common.NewSinks(obs)
-			//processors := common.NewProcessors(obs, sinks)
+			notifiers := common.NewNotifiers(obs)
+			notifiers.Add(notifier.NewSlack(notifierSlack, obs))
+
+			verifiers := common.NewVerifiers(obs, notifiers)
+			verifiers.Add(verifier.NewHttp(verifierHttp, obs))
+
+			observers := common.NewObservers(obs, verifiers)
+			observers.Add(observer.NewDatadog(observerDatadog, obs))
+
+			sources := common.NewSources(obs, observers)
+			sources.Add(source.NewConfig(sourceConfig, obs))
 
 			// define scheduler
 			scheduler := gocron.NewScheduler(time.UTC)
@@ -235,6 +264,10 @@ func Execute() {
 	flags.StringVar(&prometheusMetricsOptions.URL, "prometheus-metrics-url", prometheusMetricsOptions.URL, "Prometheus metrics endpoint url")
 	flags.StringVar(&prometheusMetricsOptions.Listen, "prometheus-metrics-listen", prometheusMetricsOptions.Listen, "Prometheus metrics listen")
 	flags.StringVar(&prometheusMetricsOptions.Prefix, "prometheus-metrics-prefix", prometheusMetricsOptions.Prefix, "Prometheus metrics prefix")
+
+	flags.StringVar(&observerDatadog.URL, "observer-datadog", observerDatadog.URL, "Observer datadog url")
+
+	flags.StringVar(&sourceConfig.Path, "config-path", sourceConfig.Path, "Source config path")
 
 	// Signal
 	/*
