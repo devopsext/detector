@@ -2,11 +2,14 @@ module github.com/devopsext/detector
 
 go 1.22.1
 
+replace gopkg.in/DataDog/dd-trace-go.v1 => github.com/devopsext/dd-trace-go v1.31.2
+
 require (
 	github.com/devopsext/sre v0.5.1
 	github.com/devopsext/utils v0.4.2
 	github.com/go-co-op/gocron v1.37.0
 	github.com/spf13/cobra v1.8.1
+	gopkg.in/yaml.v2 v2.2.3
 )
 
 require (

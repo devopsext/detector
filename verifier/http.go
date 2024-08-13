@@ -11,7 +11,7 @@ type HttpOptions struct {
 }
 
 type Http struct {
-	options HttpOptions
+	options *HttpOptions
 	logger  sreCommon.Logger
 }
 
@@ -20,7 +20,7 @@ func (h *Http) Verify([]*common.ObserverResult) error {
 	return nil
 }
 
-func NewHttp(options HttpOptions, observability *common.Observability) *Http {
+func NewHttp(options *HttpOptions, observability *common.Observability) *Http {
 
 	logger := observability.Logs()
 	if utils.IsEmpty(options.URL) {

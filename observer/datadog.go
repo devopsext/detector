@@ -11,16 +11,16 @@ type DatadogOptions struct {
 }
 
 type Datadog struct {
-	options DatadogOptions
+	options *DatadogOptions
 	logger  sreCommon.Logger
 }
 
-func (d *Datadog) Observe([]*common.SourceResult) error {
+func (d *Datadog) Observe([]*common.Endpoint) error {
 
 	return nil
 }
 
-func NewDatadog(options DatadogOptions, observability *common.Observability) *Datadog {
+func NewDatadog(options *DatadogOptions, observability *common.Observability) *Datadog {
 
 	logger := observability.Logs()
 	if utils.IsEmpty(options.URL) {

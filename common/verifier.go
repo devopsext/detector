@@ -14,9 +14,8 @@ type Verifier interface {
 }
 
 type Verifiers struct {
-	logger    sreCommon.Logger
-	items     []Verifier
-	notifiers *Notifiers
+	logger sreCommon.Logger
+	items  []Verifier
 }
 
 func (vs *Verifiers) Add(v Verifier) {
@@ -27,10 +26,9 @@ func (vs *Verifiers) Add(v Verifier) {
 	vs.items = append(vs.items, v)
 }
 
-func NewVerifiers(observability *Observability, notifiers *Notifiers) *Verifiers {
+func NewVerifiers(observability *Observability) *Verifiers {
 
 	return &Verifiers{
-		logger:    observability.Logs(),
-		notifiers: notifiers,
+		logger: observability.Logs(),
 	}
 }

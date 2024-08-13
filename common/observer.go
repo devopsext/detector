@@ -6,17 +6,16 @@ import (
 )
 
 type ObserverResult struct {
-	Results []*SourceResult
+	Endpoints []*Endpoint
 }
 
 type Observer interface {
-	Observe([]*SourceResult) error
+	Observe([]*Endpoint) error
 }
 
 type Observers struct {
-	logger    sreCommon.Logger
-	items     []Observer
-	verifiers *Verifiers
+	logger sreCommon.Logger
+	items  []Observer
 }
 
 func (ob *Observers) Add(o Observer) {
@@ -27,10 +26,13 @@ func (ob *Observers) Add(o Observer) {
 	ob.items = append(ob.items, o)
 }
 
-func NewObservers(observability *Observability, verifiers *Verifiers) *Observers {
+func (ob *Observers) Items() []Observer {
+	return ob.items
+}
+
+func NewObservers(observability *Observability) *Observers {
 
 	return &Observers{
-		logger:    observability.Logs(),
-		verifiers: verifiers,
+		logger: observability.Logs(),
 	}
 }

@@ -5,32 +5,31 @@ import (
 	"github.com/devopsext/utils"
 )
 
-type SourceResult struct {
-	Endpoints []Endpoint
-}
-
 type Source interface {
-	Load() error
+	Name() string
+	Load() (Endpoints, error)
 }
 
 type Sources struct {
-	logger    sreCommon.Logger
-	items     []Source
-	observers *Observers
+	logger sreCommon.Logger
+	items  []Source
 }
 
-func (sc *Sources) Add(s Source) {
+func (ss *Sources) Add(s Source) {
 
 	if utils.IsEmpty(s) {
 		return
 	}
-	sc.items = append(sc.items, s)
+	ss.items = append(ss.items, s)
 }
 
-func NewSources(observability *Observability, observers *Observers) *Sources {
+func (ss *Sources) Items() []Source {
+	return ss.items
+}
+
+func NewSources(observability *Observability) *Sources {
 
 	return &Sources{
-		logger:    observability.Logs(),
-		observers: observers,
+		logger: observability.Logs(),
 	}
 }

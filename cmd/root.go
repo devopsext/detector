@@ -11,6 +11,7 @@ import (
 	"syscall"
 
 	"github.com/devopsext/detector/common"
+	"github.com/devopsext/detector/detector"
 	"github.com/devopsext/detector/notifier"
 	"github.com/devopsext/detector/observer"
 	"github.com/devopsext/detector/source"
@@ -18,7 +19,6 @@ import (
 	sreCommon "github.com/devopsext/sre/common"
 	sreProvider "github.com/devopsext/sre/provider"
 	"github.com/devopsext/utils"
-	"github.com/go-co-op/gocron"
 	"github.com/spf13/cobra"
 )
 
@@ -28,7 +28,7 @@ var APPNAME = "DETECTOR"
 var logs = sreCommon.NewLogs()
 var metrics = sreCommon.NewMetrics()
 var stdout *sreProvider.Stdout
-var mainWG sync.WaitGroup
+var main sync.WaitGroup
 
 type RootOptions struct {
 	Logs          []string
@@ -72,6 +72,10 @@ var verifierHttp = verifier.HttpOptions{
 
 var notifierSlack = notifier.SlackOptions{
 	Token: envGet("NOTIFIER_SLACK_URL", "").(string),
+}
+
+var detectorAvailability = detector.AvailabilityOptions{
+	Schedule: envGet("AVAILABILITY_SCHEDULE", "").(string),
 }
 
 /*var dSignalOptions = discovery.SignalOptions{
@@ -126,55 +130,6 @@ func interceptSyscall() {
 	}()
 }
 
-func runSchedule(s *gocron.Scheduler, schedule string, wait bool, jobFun interface{}) {
-
-	var ss *gocron.Scheduler
-	if len(strings.Split(schedule, " ")) == 1 {
-		ss = s.Every(schedule)
-	} else {
-		ss = s.Cron(schedule)
-	}
-	if wait {
-		ss = ss.WaitForSchedule()
-	}
-	ss.Do(jobFun)
-}
-
-/*
-func runStandAloneDiscovery(wg *sync.WaitGroup, discovery common.Discovery, logger *sreCommon.Logs) {
-
-		if utils.IsEmpty(discovery) {
-			return
-		}
-		wg.Add(1)
-		go func(d common.Discovery) {
-			defer wg.Done()
-			d.Discover()
-		}(discovery)
-		logger.Debug("%s: discovery enabled on event", discovery.Name())
-	}
-
-func runSimpleDiscovery(wg *sync.WaitGroup, scheduler *gocron.Scheduler, schedule string, discovery common.Discovery, logger *sreCommon.Logs) {
-
-		if utils.IsEmpty(discovery) {
-			return
-		}
-		// run once and return if there is flag
-		if rootOptions.RunOnce {
-			wg.Add(1)
-			go func(d common.Discovery) {
-				defer wg.Done()
-				d.Discover()
-			}(discovery)
-			return
-		}
-		// run on schedule if there is one defined
-		if !utils.IsEmpty(schedule) {
-			runSchedule(scheduler, schedule, rootOptions.SchedulerWait, discovery.Discover)
-			logger.Debug("%s: discovery enabled on schedule: %s", discovery.Name(), schedule)
-		}
-	}
-*/
 func Execute() {
 
 	rootCmd := &cobra.Command{
@@ -195,7 +150,7 @@ func Execute() {
 			prometheusMetricsOptions.Version = version
 			prometheus := sreProvider.NewPrometheusMeter(prometheusMetricsOptions, logs, stdout)
 			if utils.Contains(rootOptions.Metrics, "prometheus") && prometheus != nil {
-				prometheus.StartInWaitGroup(&mainWG)
+				prometheus.StartInWaitGroup(&main)
 				metrics.Register(prometheus)
 			}
 		},
@@ -203,46 +158,26 @@ func Execute() {
 
 			obs := common.NewObservability(logs, metrics)
 
+			sources := common.NewSources(obs)
+			sources.Add(source.NewConfig(&sourceConfig, obs))
+
+			observers := common.NewObservers(obs)
+			observers.Add(observer.NewDatadog(&observerDatadog, obs))
+
+			verifiers := common.NewVerifiers(obs)
+			verifiers.Add(verifier.NewHttp(&verifierHttp, obs))
+
 			notifiers := common.NewNotifiers(obs)
 			notifiers.Add(notifier.NewSlack(notifierSlack, obs))
 
-			verifiers := common.NewVerifiers(obs, notifiers)
-			verifiers.Add(verifier.NewHttp(verifierHttp, obs))
+			detectors := common.NewDetectors(obs)
+			detectors.Add(detector.NewAvailability(&detectorAvailability, obs, sources, observers, verifiers, notifiers))
 
-			observers := common.NewObservers(obs, verifiers)
-			observers.Add(observer.NewDatadog(observerDatadog, obs))
-
-			sources := common.NewSources(obs, observers)
-			sources.Add(source.NewConfig(sourceConfig, obs))
-
-			// define scheduler
-			scheduler := gocron.NewScheduler(time.UTC)
-			wg := &sync.WaitGroup{}
-
-			// run simple discoveries
-			/*
-				runSimpleDiscovery(wg, scheduler, dObserviumOptions.Schedule, discovery.NewObservium(dObserviumOptions, obs, processors), logger)
-				runSimpleDiscovery(wg, scheduler, dZabbixOptions.Schedule, discovery.NewZabbix(dZabbixOptions, obs, processors), logger)
-				runSimpleDiscovery(wg, scheduler, dK8sOptions.Schedule, discovery.NewK8s(dK8sOptions, obs, processors), logger)
-				runSimpleDiscovery(wg, scheduler, dVCenterOptions.Schedule, discovery.NewVCenter(dVCenterOptions, obs, processors), logger)
-				runSimpleDiscovery(wg, scheduler, dAWSEC2Options.Schedule, discovery.NewAWSEC2(dAWSEC2Options, obs, processors), logger)
-				runSimpleDiscovery(wg, scheduler, dDumbOptions.Schedule, discovery.NewDumb(dDumbOptions, obs, processors), logger)
-			*/
-
-			scheduler.StartAsync()
-
-			// run supportive discoveries without scheduler
-			if !rootOptions.RunOnce {
-				/*
-					runStandAloneDiscovery(wg, discovery.NewPubSub(dPubSubOptions, obs, processors), logger)
-					runStandAloneDiscovery(wg, discovery.NewFiles(dFilesOptions, obs, processors), logger)
-				*/
-			}
-			wg.Wait()
+			detectors.Start(rootOptions.RunOnce, rootOptions.SchedulerWait)
 
 			// start wait if there are some jobs
-			if scheduler.Len() > 0 {
-				mainWG.Wait()
+			if detectors.Scheduled() {
+				main.Wait()
 			}
 		},
 	}
@@ -265,9 +200,15 @@ func Execute() {
 	flags.StringVar(&prometheusMetricsOptions.Listen, "prometheus-metrics-listen", prometheusMetricsOptions.Listen, "Prometheus metrics listen")
 	flags.StringVar(&prometheusMetricsOptions.Prefix, "prometheus-metrics-prefix", prometheusMetricsOptions.Prefix, "Prometheus metrics prefix")
 
-	flags.StringVar(&observerDatadog.URL, "observer-datadog", observerDatadog.URL, "Observer datadog url")
+	flags.StringVar(&sourceConfig.Path, "source-config-path", sourceConfig.Path, "Source config path")
 
-	flags.StringVar(&sourceConfig.Path, "config-path", sourceConfig.Path, "Source config path")
+	flags.StringVar(&observerDatadog.URL, "observer-datadog-url", observerDatadog.URL, "Observer datadog url")
+
+	flags.StringVar(&verifierHttp.URL, "verifier-http-url", verifierHttp.URL, "Verfifier http url")
+
+	flags.StringVar(&notifierSlack.Token, "notifier-slack-token", notifierSlack.Token, "Notifier slack token")
+
+	flags.StringVar(&detectorAvailability.Schedule, "detector-availability-schedule", detectorAvailability.Schedule, "Detector availability schedule")
 
 	// Signal
 	/*
