@@ -2,6 +2,7 @@ package source
 
 import (
 	"errors"
+	"fmt"
 	"os"
 
 	"github.com/devopsext/detector/common"
@@ -62,15 +63,19 @@ func (cs *Config) loadYaml(file string) (*ConfigFile, error) {
 	return config, nil
 }
 
-func (cs *Config) Load() (common.Endpoints, error) {
+func (cs *Config) Load() (*common.SourceResult, error) {
 
 	config, err := cs.loadYaml(cs.options.Path)
 	if err != nil {
-		cs.logger.Error("Config cannot read from file %s, error: %s", cs.options.Path, err)
-		return nil, err
+		return nil, fmt.Errorf("Config cannot read from file %s, error: %s", cs.options.Path, err)
 	}
 
-	return config.Endpoints, nil
+	r := &common.SourceResult{
+		Source:    cs,
+		Endpoints: config.Endpoints,
+	}
+
+	return r, nil
 }
 
 func NewConfig(options *ConfigOptions, observability *common.Observability) *Config {

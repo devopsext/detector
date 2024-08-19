@@ -15,7 +15,7 @@ type Http struct {
 	logger  sreCommon.Logger
 }
 
-func (h *Http) Verify([]*common.ObserverResult) error {
+func (h *Http) Verify([]*common.ObserveResult) error {
 
 	return nil
 }

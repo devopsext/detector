@@ -1,9 +1,10 @@
 package common
 
 type Endpoint struct {
-	URL       string
-	Disabled  bool
-	Countries []string
+	URL         string
+	Disabled    bool
+	Countries   []string
+	Probability float64
 }
 
 type Endpoints = []*Endpoint

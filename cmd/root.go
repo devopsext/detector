@@ -64,6 +64,7 @@ var sourceConfig = source.ConfigOptions{
 
 var observerDatadog = observer.DatadogOptions{
 	URL: envGet("OBSERVER_DATADOG_URL", "").(string),
+	Key: envGet("OBSERVER_DATADOG_KEY", "").(string),
 }
 
 var verifierHttp = verifier.HttpOptions{
@@ -203,6 +204,7 @@ func Execute() {
 	flags.StringVar(&sourceConfig.Path, "source-config-path", sourceConfig.Path, "Source config path")
 
 	flags.StringVar(&observerDatadog.URL, "observer-datadog-url", observerDatadog.URL, "Observer datadog url")
+	flags.StringVar(&observerDatadog.Key, "observer-datadog-key", observerDatadog.Key, "Observer datadog key")
 
 	flags.StringVar(&verifierHttp.URL, "verifier-http-url", verifierHttp.URL, "Verfifier http url")
 

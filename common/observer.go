@@ -5,12 +5,15 @@ import (
 	"github.com/devopsext/utils"
 )
 
-type ObserverResult struct {
-	Endpoints []*Endpoint
+type ObserveResult struct {
+	Observer     Observer
+	SourceResult *SourceResult
+	Ednpoints    Endpoints
 }
 
 type Observer interface {
-	Observe([]*Endpoint) error
+	Name() string
+	Observe(sr *SourceResult) (*ObserveResult, error)
 }
 
 type Observers struct {

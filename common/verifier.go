@@ -6,11 +6,11 @@ import (
 )
 
 type VerifierResult struct {
-	Results []*ObserverResult
+	Results []*ObserveResult
 }
 
 type Verifier interface {
-	Verify([]*ObserverResult) error
+	Verify([]*ObserveResult) error
 }
 
 type Verifiers struct {

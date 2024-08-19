@@ -5,9 +5,14 @@ import (
 	"github.com/devopsext/utils"
 )
 
+type SourceResult struct {
+	Source    Source
+	Endpoints Endpoints
+}
+
 type Source interface {
 	Name() string
-	Load() (Endpoints, error)
+	Load() (*SourceResult, error)
 }
 
 type Sources struct {
