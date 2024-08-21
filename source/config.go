@@ -12,7 +12,7 @@ import (
 )
 
 type ConfigFile struct {
-	Endpoints common.Endpoints
+	Endpoints common.SourceEndpoints
 }
 
 type ConfigOptions struct {

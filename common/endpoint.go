@@ -1,13 +1,10 @@
 package common
 
 type Endpoint struct {
-	URL         string
-	Disabled    bool
-	Countries   []string
-	Probability float64
+	URI       string
+	Disabled  bool
+	Countries []string
 }
-
-type Endpoints = []*Endpoint
 
 const (
 	EndpointTypeUnknown = 0
@@ -22,10 +19,10 @@ const (
 	EndpointSchemaTcp     = "tcp"
 )
 
-func (e *Endpoint) Type() int {
+func (se *Endpoint) Type() int {
 	return EndpointTypeUnknown
 }
 
-func (e *Endpoint) Schema() string {
+func (se *Endpoint) Schema() string {
 	return EndpointSchemaUnknown
 }

@@ -6,11 +6,16 @@ import (
 
 	"github.com/devopsext/detector/common"
 	sreCommon "github.com/devopsext/sre/common"
+	"github.com/devopsext/utils"
 	"golang.org/x/sync/errgroup"
 )
 
 type AvailabilityOptions struct {
-	Schedule string
+	Schedule  string
+	Sources   string
+	Observers string
+	Verifiers string
+	Notifiers string
 }
 
 type Availability struct {
@@ -44,6 +49,8 @@ func (a *Availability) load() ([]*common.SourceResult, error) {
 
 	g := &errgroup.Group{}
 	m := &sync.Map{}
+
+	//sources := a.sources.FindByPattern(a.sources)
 
 	for _, s := range items {
 
@@ -98,18 +105,20 @@ func (a *Availability) observe(sr *common.SourceResult) ([]*common.ObserveResult
 
 		g.Go(func() error {
 
-			_, err := o.Observe(sr)
+			or, err := o.Observe(sr)
 			if err != nil {
 				return err
 			}
 
-			r := &common.ObserveResult{}
+			/*for _, e := range or.Endpoints {
+
+			}*/
 
 			/*for i, e := range or.Endpoints {
 
 				m.Store(i, e)
 			}*/
-			m.Store(o.Name(), r)
+			m.Store(o.Name(), or)
 			return nil
 		})
 	}
@@ -160,9 +169,31 @@ func (a *Availability) Detect() error {
 func NewAvailability(options *AvailabilityOptions, observability *common.Observability,
 	sources *common.Sources, observers *common.Observers, verifiers *common.Verifiers, notifiers *common.Notifiers) *Availability {
 
+	logger := observability.Logs()
+
+	if utils.IsEmpty(options.Sources) {
+		logger.Debug("Availability detector has no sources. Skipped")
+		return nil
+	}
+
+	if utils.IsEmpty(options.Observers) {
+		logger.Debug("Availability detector has no observers. Skipped")
+		return nil
+	}
+
+	if utils.IsEmpty(options.Verifiers) {
+		logger.Debug("Availability detector has no verifiers. Skipped")
+		return nil
+	}
+
+	if utils.IsEmpty(options.Notifiers) {
+		logger.Debug("Availability detector has no notifiers. Skipped")
+		return nil
+	}
+
 	return &Availability{
 		options:   options,
-		logger:    observability.Logs(),
+		logger:    logger,
 		sources:   sources,
 		observers: observers,
 		verifiers: verifiers,

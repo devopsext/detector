@@ -5,9 +5,11 @@ import (
 	"github.com/devopsext/utils"
 )
 
+type SourceEndpoints = []*Endpoint
+
 type SourceResult struct {
 	Source    Source
-	Endpoints Endpoints
+	Endpoints SourceEndpoints
 }
 
 type Source interface {
@@ -30,6 +32,19 @@ func (ss *Sources) Add(s Source) {
 
 func (ss *Sources) Items() []Source {
 	return ss.items
+}
+
+func (ss *Sources) FindByPattern(pattern string) map[string]Source {
+
+	if len(ss.items) == 0 {
+		return nil
+	}
+	return nil
+	/*
+		for _, s := range ss.items {
+			if s.Name()
+		}
+	*/
 }
 
 func NewSources(observability *Observability) *Sources {

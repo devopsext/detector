@@ -72,6 +72,11 @@ func (ds *Detectors) run(wg *sync.WaitGroup, once, wait bool, d Detector) {
 
 func (ds *Detectors) Start(once, wait bool) {
 
+	items := ds.items
+	if len(items) == 0 {
+		return
+	}
+
 	wg := &sync.WaitGroup{}
 
 	for _, d := range ds.items {

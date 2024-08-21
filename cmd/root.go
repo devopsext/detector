@@ -63,8 +63,14 @@ var sourceConfig = source.ConfigOptions{
 }
 
 var observerDatadog = observer.DatadogOptions{
-	URL: envGet("OBSERVER_DATADOG_URL", "").(string),
-	Key: envGet("OBSERVER_DATADOG_KEY", "").(string),
+	Site:       envGet("OBSERVER_DATADOG_SITE", "").(string),
+	Key:        envGet("OBSERVER_DATADOG_KEY", "").(string),
+	TagUri:     envGet("OBSERVER_DATADOG_TAG_URI", "").(string),
+	TagCountry: envGet("OBSERVER_DATADOG_TAG_COUNTRY", "").(string),
+	Query:      envFileContentExpand("OBSERVER_DATADOG_QUERY", ""),
+	File:       envFileContentExpand("OBSERVER_DATADOG_FILE", ""),
+	Min:        envGet("OBSERVER_DATADOG_MIN", 0.0).(float64),
+	Max:        envGet("OBSERVER_DATADOG_MAX", 100.0).(float64),
 }
 
 var verifierHttp = verifier.HttpOptions{
@@ -76,7 +82,11 @@ var notifierSlack = notifier.SlackOptions{
 }
 
 var detectorAvailability = detector.AvailabilityOptions{
-	Schedule: envGet("AVAILABILITY_SCHEDULE", "").(string),
+	Schedule:  envGet("AVAILABILITY_SCHEDULE", "").(string),
+	Sources:   envGet("AVAILABILITY_SOURCES", "").(string),
+	Observers: envGet("AVAILABILITY_OBSERVERS", "").(string),
+	Verifiers: envGet("AVAILABILITY_VERIFIERS", "").(string),
+	Notifiers: envGet("AVAILABILITY_NOTIFIERS", "").(string),
 }
 
 /*var dSignalOptions = discovery.SignalOptions{
@@ -203,14 +213,24 @@ func Execute() {
 
 	flags.StringVar(&sourceConfig.Path, "source-config-path", sourceConfig.Path, "Source config path")
 
-	flags.StringVar(&observerDatadog.URL, "observer-datadog-url", observerDatadog.URL, "Observer datadog url")
+	flags.StringVar(&observerDatadog.Site, "observer-datadog-site", observerDatadog.Site, "Observer datadog site")
 	flags.StringVar(&observerDatadog.Key, "observer-datadog-key", observerDatadog.Key, "Observer datadog key")
+	flags.StringVar(&observerDatadog.TagUri, "observer-datadog-tag-uri", observerDatadog.TagUri, "Observer datadog tag uri")
+	flags.StringVar(&observerDatadog.TagCountry, "observer-datadog-tag-country", observerDatadog.TagCountry, "Observer datadog tag country")
+	flags.StringVar(&observerDatadog.Query, "observer-datadog-query", observerDatadog.Query, "Observer datadog query")
+	flags.StringVar(&observerDatadog.File, "observer-datadog-file", observerDatadog.File, "Observer datadog file")
+	flags.Float64Var(&observerDatadog.Min, "observer-datadog-min", observerDatadog.Min, "Observer datadog min value")
+	flags.Float64Var(&observerDatadog.Max, "observer-datadog-max", observerDatadog.Max, "Observer datadog max value")
 
 	flags.StringVar(&verifierHttp.URL, "verifier-http-url", verifierHttp.URL, "Verfifier http url")
 
 	flags.StringVar(&notifierSlack.Token, "notifier-slack-token", notifierSlack.Token, "Notifier slack token")
 
 	flags.StringVar(&detectorAvailability.Schedule, "detector-availability-schedule", detectorAvailability.Schedule, "Detector availability schedule")
+	flags.StringVar(&detectorAvailability.Sources, "detector-availability-sources", detectorAvailability.Sources, "Detector availability sources")
+	flags.StringVar(&detectorAvailability.Observers, "detector-availability-observers", detectorAvailability.Observers, "Detector availability observers")
+	flags.StringVar(&detectorAvailability.Verifiers, "detector-availability-verifiers", detectorAvailability.Verifiers, "Detector availability verifiers")
+	flags.StringVar(&detectorAvailability.Notifiers, "detector-availability-notifiers", detectorAvailability.Notifiers, "Detector availability notifiers")
 
 	// Signal
 	/*

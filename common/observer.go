@@ -5,10 +5,20 @@ import (
 	"github.com/devopsext/utils"
 )
 
+type Probability = float64
+
+type ObserveEndpoint struct {
+	URI         string
+	Countries   map[string]*Probability
+	Probability Probability
+}
+
+type ObserveEndpoints = []*ObserveEndpoint
+
 type ObserveResult struct {
 	Observer     Observer
 	SourceResult *SourceResult
-	Ednpoints    Endpoints
+	Endpoints    ObserveEndpoints
 }
 
 type Observer interface {
