@@ -1,6 +1,9 @@
 package common
 
 import (
+	"maps"
+	"slices"
+
 	sreCommon "github.com/devopsext/sre/common"
 	"github.com/devopsext/utils"
 )
@@ -36,15 +39,31 @@ func (ss *Sources) Items() []Source {
 
 func (ss *Sources) FindByPattern(pattern string) map[string]Source {
 
+	r := make(map[string]Source)
+
 	if len(ss.items) == 0 {
-		return nil
+		return r
 	}
-	return nil
-	/*
-		for _, s := range ss.items {
-			if s.Name()
+
+	if utils.IsEmpty(pattern) {
+		return r
+	}
+
+	m := utils.MapGetKeyValues(pattern)
+	if len(m) == 0 {
+		return r
+	}
+	keys := slices.Collect(maps.Keys(m))
+
+	for _, s := range ss.items {
+
+		name := s.Name()
+		if !utils.Contains(keys, name) {
+			continue
 		}
-	*/
+		r[name] = s
+	}
+	return r
 }
 
 func NewSources(observability *Observability) *Sources {

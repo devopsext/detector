@@ -64,13 +64,15 @@ var sourceConfig = source.ConfigOptions{
 
 var observerDatadog = observer.DatadogOptions{
 	Site:       envGet("OBSERVER_DATADOG_SITE", "").(string),
-	Key:        envGet("OBSERVER_DATADOG_KEY", "").(string),
+	ApiKey:     envGet("OBSERVER_DATADOG_API_KEY", "").(string),
+	AppKey:     envGet("OBSERVER_DATADOG_APP_KEY", "").(string),
 	TagUri:     envGet("OBSERVER_DATADOG_TAG_URI", "").(string),
 	TagCountry: envGet("OBSERVER_DATADOG_TAG_COUNTRY", "").(string),
 	Query:      envFileContentExpand("OBSERVER_DATADOG_QUERY", ""),
 	File:       envFileContentExpand("OBSERVER_DATADOG_FILE", ""),
 	Min:        envGet("OBSERVER_DATADOG_MIN", 0.0).(float64),
 	Max:        envGet("OBSERVER_DATADOG_MAX", 100.0).(float64),
+	Duration:   envGet("OBSERVER_DATADOG_DURATION", "").(string),
 }
 
 var verifierHttp = verifier.HttpOptions{
@@ -214,13 +216,15 @@ func Execute() {
 	flags.StringVar(&sourceConfig.Path, "source-config-path", sourceConfig.Path, "Source config path")
 
 	flags.StringVar(&observerDatadog.Site, "observer-datadog-site", observerDatadog.Site, "Observer datadog site")
-	flags.StringVar(&observerDatadog.Key, "observer-datadog-key", observerDatadog.Key, "Observer datadog key")
+	flags.StringVar(&observerDatadog.AppKey, "observer-datadog-app-key", observerDatadog.AppKey, "Observer datadog app key")
+	flags.StringVar(&observerDatadog.ApiKey, "observer-datadog-api-key", observerDatadog.ApiKey, "Observer datadog api key")
 	flags.StringVar(&observerDatadog.TagUri, "observer-datadog-tag-uri", observerDatadog.TagUri, "Observer datadog tag uri")
 	flags.StringVar(&observerDatadog.TagCountry, "observer-datadog-tag-country", observerDatadog.TagCountry, "Observer datadog tag country")
 	flags.StringVar(&observerDatadog.Query, "observer-datadog-query", observerDatadog.Query, "Observer datadog query")
 	flags.StringVar(&observerDatadog.File, "observer-datadog-file", observerDatadog.File, "Observer datadog file")
 	flags.Float64Var(&observerDatadog.Min, "observer-datadog-min", observerDatadog.Min, "Observer datadog min value")
 	flags.Float64Var(&observerDatadog.Max, "observer-datadog-max", observerDatadog.Max, "Observer datadog max value")
+	flags.StringVar(&observerDatadog.Duration, "observer-datadog-duration", observerDatadog.Duration, "Observer datadog duration")
 
 	flags.StringVar(&verifierHttp.URL, "verifier-http-url", verifierHttp.URL, "Verfifier http url")
 

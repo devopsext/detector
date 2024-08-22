@@ -1,8 +1,10 @@
 module github.com/devopsext/detector
 
-go 1.22.1
+go 1.23
 
 replace gopkg.in/DataDog/dd-trace-go.v1 => github.com/devopsext/dd-trace-go v1.31.2
+
+replace github.com/devopsext/utils => ../utils/
 
 require (
 	github.com/DataDog/datadog-api-client-go/v2 v2.29.0

@@ -4,7 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"strings"
+	"time"
 
 	"github.com/devopsext/detector/common"
 	sreCommon "github.com/devopsext/sre/common"
@@ -17,13 +19,15 @@ import (
 
 type DatadogOptions struct {
 	Site       string
-	Key        string
+	ApiKey     string
+	AppKey     string
 	TagUri     string
 	TagCountry string
 	Query      string
 	File       string
 	Min        float64
 	Max        float64
+	Duration   string
 }
 
 type DatadogMetricSummary struct {
@@ -39,7 +43,8 @@ type DatadogMetricData = []*DatadogMetricSummary
 type Datadog struct {
 	options *DatadogOptions
 	logger  sreCommon.Logger
-	api     *datadogV2.MetricsApi
+	apiV1   *datadogV1.MetricsApi
+	apiV2   *datadogV2.MetricsApi
 	ctx     context.Context
 }
 
@@ -48,115 +53,6 @@ const ObserverDatadogName = "Datadog"
 func (d *Datadog) Name() string {
 	return ObserverDatadogName
 }
-
-/*
-func (d *Datadog) getAggregator(query string) datadogV2.MetricsAggregator {
-
-	def := datadogV2.METRICSAGGREGATOR_AVG
-
-	prefix := ""
-	arr := strings.Split(query, ":")
-	if len(arr) > 1 {
-		prefix = strings.TrimSpace(arr[0])
-	}
-
-	if !utils.IsEmpty(prefix) {
-		return datadogV2.MetricsAggregator(prefix)
-	}
-
-	return def
-}
-
-func (d *Datadog) queryScalarData(from, to, query string) (*datadogV2.ScalarFormulaQueryResponse, error) {
-
-	t1 := int64(1724158716000)
-	t2 := int64(1724158762000)
-
-	squery := datadogV2.ScalarQuery{
-		MetricsScalarQuery: &datadogV2.MetricsScalarQuery{
-			Aggregator: d.getAggregator(query),
-			DataSource: datadogV2.METRICSDATASOURCE_METRICS,
-			Query:      query,
-		},
-	}
-
-	body := datadogV2.ScalarFormulaQueryRequest{
-		Data: datadogV2.ScalarFormulaRequest{
-			Attributes: datadogV2.ScalarFormulaRequestAttributes{
-				From:    t1,
-				To:      t2,
-				Queries: []datadogV2.ScalarQuery{squery},
-			},
-			Type: datadogV2.SCALARFORMULAREQUESTTYPE_SCALAR_REQUEST,
-		},
-	}
-
-	sr, r, err := d.api.QueryScalarData(d.ctx, body)
-	if err != nil {
-		return nil, err
-	}
-
-	if r.StatusCode != 200 {
-		return nil, fmt.Errorf("Datadog query scalar data status %s [%d]", r.Status, r.StatusCode)
-	}
-	return &sr, nil
-}
-
-func (d *Datadog) queryTimeseriesData(from, to, query string) (*datadogV2.TimeseriesFormulaQueryResponse, error) {
-
-	t1 := int64(1724158716000)
-	t2 := int64(1724158762000)
-
-	squery := datadogV2.TimeseriesQuery{
-		MetricsTimeseriesQuery: &datadogV2.MetricsTimeseriesQuery{
-			DataSource: datadogV2.METRICSDATASOURCE_METRICS,
-			Query:      query,
-		},
-	}
-
-	body := datadogV2.TimeseriesFormulaQueryRequest{
-		Data: datadogV2.TimeseriesFormulaRequest{
-			Attributes: datadogV2.TimeseriesFormulaRequestAttributes{
-				Formulas: []datadogV2.QueryFormula{
-					{
-						Formula: "a",
-						Limit: &datadogV2.FormulaLimit{
-							Count: datadog.PtrInt32(10),
-							Order: datadogV2.QUERYSORTORDER_DESC.Ptr(),
-						},
-					},
-				},
-				From:    t1,
-				To:      t2,
-				Queries: []datadogV2.TimeseriesQuery{squery},
-			},
-			Type: datadogV2.TIMESERIESFORMULAREQUESTTYPE_TIMESERIES_REQUEST,
-		},
-	}
-
-	sr, r, err := d.api.QueryTimeseriesData(d.ctx, body)
-	if err != nil {
-		return nil, err
-	}
-
-	if r.StatusCode != 200 {
-		return nil, fmt.Errorf("Datadog query timeseries data status %s [%d]", r.Status, r.StatusCode)
-	}
-	return &sr, nil
-}
-
-	dsr, err := d.queryTimeseriesData("", "", d.options.Query)
-	if err != nil {
-		return nil, err
-	}
-
-	if !dsr.HasData() {
-		return nil, errors.New("Datadog query has no data")
-	}
-
-	d.logger.Debug("Datadog found elements %d", len(dsr.Data.UnparsedObject))
-
-*/
 
 func (d *Datadog) getTagValue(ts []string, tag string) string {
 
@@ -178,6 +74,42 @@ func (d *Datadog) getTagValue(ts []string, tag string) string {
 	}
 	return r
 }
+
+/*
+func (d *Datadog) timeseriesCalculate(points []*float64, minLimit, maxLimit float64) *DatadogMetricSummary {
+
+	count := 0
+	sum := float64(0.0)
+
+	// swap min and max
+	min := maxLimit
+	max := minLimit
+
+	for _, p := range points {
+
+		if len(av) < 2 {
+			continue
+		}
+		// use only second cause its timeseries
+		p := av[1]
+		if p == nil {
+			continue
+		}
+		count = count + 1
+		sum = sum + *p
+
+		if *p > max {
+			max = *p
+		}
+		if *p < min {
+			min = *p
+		}
+	}
+
+	avg := sum / float64(count)
+
+}
+*/
 
 func (d *Datadog) timeseriesV1ToData(resp *datadogV1.MetricsQueryResponse, minLimit, maxLimit float64) DatadogMetricData {
 
@@ -239,7 +171,7 @@ func (d *Datadog) timeseriesV1ToData(resp *datadogV1.MetricsQueryResponse, minLi
 	return r
 }
 
-func (d *Datadog) loadFile(file string) (DatadogMetricData, error) {
+func (d *Datadog) loadV1File(file string) (DatadogMetricData, error) {
 
 	var resp datadogV1.MetricsQueryResponse
 	err := json.Unmarshal([]byte(file), &resp)
@@ -251,11 +183,158 @@ func (d *Datadog) loadFile(file string) (DatadogMetricData, error) {
 		return nil, errors.New(*resp.Error)
 	}
 
-	if len(resp.Series) == 0 {
+	if !resp.HasSeries() {
 		return nil, nil
 	}
 
 	return d.timeseriesV1ToData(&resp, d.options.Min, d.options.Max), nil
+}
+
+func (d *Datadog) getV1Timeseries(query string, from, to time.Time) (DatadogMetricData, error) {
+
+	t1 := from.Unix()
+	t2 := to.Unix()
+
+	resp, _, err := d.apiV1.QueryMetrics(d.ctx, t1, t2, query)
+	if err != nil {
+		return nil, err
+	}
+
+	if resp.Error != nil {
+		return nil, errors.New(*resp.Error)
+	}
+
+	if !resp.HasSeries() {
+		return nil, nil
+	}
+
+	return d.timeseriesV1ToData(&resp, d.options.Min, d.options.Max), nil
+}
+
+func (d *Datadog) timeseriesV2ToData(resp *datadogV2.TimeseriesFormulaQueryResponse, minLimit, maxLimit float64, tagUri, tagCountry string) DatadogMetricData {
+
+	r := DatadogMetricData{}
+
+	tr := resp.GetData()
+
+	series := tr.Attributes.GetSeries()
+	values := tr.Attributes.GetValues()
+
+	if len(series) != len(values) {
+		return r
+	}
+
+	for idx, s := range series {
+
+		v := values[idx]
+
+		uri := d.getTagValue(s.GroupTags, tagUri)
+		if utils.IsEmpty(uri) {
+			continue
+		}
+		country := d.getTagValue(s.GroupTags, tagCountry)
+		if utils.IsEmpty(country) {
+			continue
+		}
+
+		if len(v) == 0 {
+			continue
+		}
+
+		count := 0
+		sum := float64(0.0)
+
+		// swap min and max
+		min := maxLimit
+		max := minLimit
+
+		for _, p := range v {
+
+			if p == nil {
+				continue
+			}
+			count = count + 1
+			sum = sum + *p
+
+			if *p > max {
+				max = *p
+			}
+			if *p < min {
+				min = *p
+			}
+		}
+
+		avg := sum / float64(count)
+
+		r = append(r, &DatadogMetricSummary{
+			URI:     common.NormalizeURI(uri),
+			Country: common.NormalizeCountry(country),
+			Avg:     avg,
+			Min:     min,
+			Max:     max,
+		})
+	}
+	return r
+}
+
+func (d *Datadog) getV2Timeseries(query string, from, to time.Time, tagUri, tagCountry string) (DatadogMetricData, error) {
+
+	t1 := from.UnixMilli()
+	t2 := to.UnixMilli()
+
+	name := "a"
+	squery := datadogV2.TimeseriesQuery{
+		MetricsTimeseriesQuery: &datadogV2.MetricsTimeseriesQuery{
+			Name:       &name,
+			DataSource: datadogV2.METRICSDATASOURCE_METRICS,
+			Query:      query,
+		},
+	}
+
+	body := datadogV2.TimeseriesFormulaQueryRequest{
+		Data: datadogV2.TimeseriesFormulaRequest{
+			Attributes: datadogV2.TimeseriesFormulaRequestAttributes{
+				From:    t1,
+				To:      t2,
+				Queries: []datadogV2.TimeseriesQuery{squery},
+			},
+			Type: datadogV2.TIMESERIESFORMULAREQUESTTYPE_TIMESERIES_REQUEST,
+		},
+	}
+
+	resp, _, err := d.apiV2.QueryTimeseriesData(d.ctx, body)
+	if err != nil {
+		return nil, err
+	}
+
+	if resp.HasErrors() {
+		return nil, errors.New(*resp.Errors)
+	}
+
+	if !resp.HasData() {
+		return nil, nil
+	}
+
+	return d.timeseriesV2ToData(&resp, d.options.Min, d.options.Max, tagUri, tagCountry), nil
+}
+
+func (d *Datadog) getFromTo(duration string) (*time.Time, *time.Time, error) {
+
+	dur, err := time.ParseDuration(duration)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	start := time.Now()
+	end := start.Add(dur)
+
+	if start.UnixNano() > end.UnixNano() {
+		t := end
+		end = start
+		start = t
+	}
+
+	return &start, &end, nil
 }
 
 func (d *Datadog) filterURIbyCountry(md DatadogMetricData, uri, country string) DatadogMetricData {
@@ -278,20 +357,50 @@ func (d *Datadog) firstURIbyCountry(md DatadogMetricData, uri, country string) *
 	return nil
 }
 
+func (d *Datadog) buildQuery(sr *common.SourceResult, query, tagUri string) string {
+
+	from := ""
+	for _, e := range sr.Endpoints {
+
+		filter := fmt.Sprintf("%s:%s", tagUri, e.URI)
+
+		if !utils.IsEmpty(from) {
+			from = fmt.Sprintf("%s OR %s", from, filter)
+		} else {
+			from = filter
+		}
+	}
+
+	return fmt.Sprintf(query, from)
+}
+
 func (d *Datadog) Observe(sr *common.SourceResult) (*common.ObserveResult, error) {
 
 	if len(sr.Endpoints) == 0 {
 		return nil, errors.New("Datadog cannot process empty endpoints")
 	}
 
-	query := d.options.Query // need to build it based on field and query from options
-
-	d.logger.Debug("Datadog query: %s", query)
-
 	var md DatadogMetricData
 
 	if !utils.IsEmpty(d.options.File) {
-		mf, err := d.loadFile(d.options.File)
+
+		mf, err := d.loadV1File(d.options.File)
+		if err != nil {
+			return nil, err
+		}
+		md = mf
+	} else if !utils.IsEmpty(d.options.Query) {
+
+		query := d.buildQuery(sr, d.options.Query, d.options.TagUri)
+		d.logger.Debug("Datadog query: %s", query)
+
+		from, to, err := d.getFromTo(d.options.Duration)
+		if err != nil {
+			return nil, err
+		}
+		d.logger.Debug("Datadog interval %d <=> %d", from.UnixMilli(), to.UnixMilli())
+
+		mf, err := d.getV2Timeseries(query, *from, *to, d.options.TagUri, d.options.TagCountry)
 		if err != nil {
 			return nil, err
 		}
@@ -311,7 +420,7 @@ func (d *Datadog) Observe(sr *common.SourceResult) (*common.ObserveResult, error
 
 		count := 0
 		sum := float64(0.0)
-		countries := make(map[string]*common.Probability)
+		countries := make(common.ObserveCountries)
 
 		for _, c := range e.Countries {
 
@@ -325,19 +434,17 @@ func (d *Datadog) Observe(sr *common.SourceResult) (*common.ObserveResult, error
 
 			count = count + 1
 			sum = sum + sm.Avg
-			countries[country] = &sm.Avg
+			savg := d.options.Max - sm.Avg
+			countries[country] = &savg
 		}
 
 		if count == 0 {
 			continue
 		}
 
-		avg := sum / float64(count)
-
 		e := &common.ObserveEndpoint{
-			URI:         uri,
-			Countries:   countries,
-			Probability: d.options.Max - avg,
+			URI:       uri,
+			Countries: countries,
 		}
 		es = append(es, e)
 	}
@@ -364,11 +471,13 @@ func NewDatadog(options *DatadogOptions, observability *common.Observability) *D
 		return nil
 	}
 
-	if utils.IsEmpty(options.Query) {
-		logger.Debug("Datdog query is not defined. Skipped.")
+	if utils.IsEmpty(options.Query) && utils.IsEmpty(options.File) {
+		logger.Debug("Datdog query or file are not defined. Skipped.")
 		return nil
-	} else if utils.IsEmpty(options.File) {
-		logger.Debug("Datdog file is not defined. Skipped.")
+	}
+
+	if utils.IsEmpty(options.Duration) {
+		logger.Debug("Datdog duration is not defined. Skipped.")
 		return nil
 	}
 
@@ -377,7 +486,8 @@ func NewDatadog(options *DatadogOptions, observability *common.Observability) *D
 	config.SetUnstableOperationEnabled("v2.QueryTimeseriesData", true)
 
 	client := datadog.NewAPIClient(config)
-	api := datadogV2.NewMetricsApi(client)
+	apiV1 := datadogV1.NewMetricsApi(client)
+	apiV2 := datadogV2.NewMetricsApi(client)
 
 	ctx := context.WithValue(
 		context.Background(),
@@ -392,10 +502,10 @@ func NewDatadog(options *DatadogOptions, observability *common.Observability) *D
 		datadog.ContextAPIKeys,
 		map[string]datadog.APIKey{
 			"appKeyAuth": {
-				Key: options.Key,
+				Key: options.AppKey,
 			},
 			"apiKeyAuth": {
-				Key: options.Key,
+				Key: options.ApiKey,
 			},
 		},
 	)
@@ -403,7 +513,8 @@ func NewDatadog(options *DatadogOptions, observability *common.Observability) *D
 	return &Datadog{
 		options: options,
 		logger:  logger,
-		api:     api,
+		apiV1:   apiV1,
+		apiV2:   apiV2,
 		ctx:     ctx,
 	}
 }

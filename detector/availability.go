@@ -2,7 +2,10 @@ package detector
 
 import (
 	"errors"
+	"slices"
 	"sync"
+
+	"maps"
 
 	"github.com/devopsext/detector/common"
 	sreCommon "github.com/devopsext/sre/common"
@@ -50,9 +53,18 @@ func (a *Availability) load() ([]*common.SourceResult, error) {
 	g := &errgroup.Group{}
 	m := &sync.Map{}
 
-	//sources := a.sources.FindByPattern(a.sources)
+	sources := a.sources.FindByPattern(a.options.Sources)
+	if len(sources) == 0 {
+		return nil, errors.New("Availability detector has no sources")
+	}
+	keys := slices.Collect(maps.Keys(sources))
 
 	for _, s := range items {
+
+		name := s.Name()
+		if !utils.Contains(keys, name) {
+			continue
+		}
 
 		g.Go(func() error {
 
@@ -71,7 +83,7 @@ func (a *Availability) load() ([]*common.SourceResult, error) {
 				}
 				r.Endpoints = append(r.Endpoints, e)
 			}
-			m.Store(s.Name(), r)
+			m.Store(name, r)
 			return nil
 		})
 	}
@@ -101,24 +113,68 @@ func (a *Availability) observe(sr *common.SourceResult) ([]*common.ObserveResult
 	g := &errgroup.Group{}
 	m := &sync.Map{}
 
+	observersConfig := a.observers.FindConfigurationByPattern(a.options.Observers)
+	if len(observersConfig) == 0 {
+		return nil, errors.New("Availability detector has no observers configurations")
+	}
+	keys := slices.Collect(maps.Keys(observersConfig))
+
 	for _, o := range items {
+
+		name := o.Name()
+		if !utils.Contains(keys, name) {
+			continue
+		}
 
 		g.Go(func() error {
 
-			or, err := o.Observe(sr)
+			old, err := o.Observe(sr)
 			if err != nil {
 				return err
 			}
 
-			/*for _, e := range or.Endpoints {
+			probability := float64(0.0)
+			oc := observersConfig[name]
+			if oc != nil {
+				probability = oc.Probability
+			}
 
-			}*/
+			es := common.ObserveEndpoints{}
 
-			/*for i, e := range or.Endpoints {
+			for _, e := range old.Endpoints {
 
-				m.Store(i, e)
-			}*/
-			m.Store(o.Name(), or)
+				if e == nil {
+					continue
+				}
+
+				countries := make(common.ObserveCountries)
+				for k, p := range e.Countries {
+
+					if *p < probability {
+						continue
+					}
+					countries[k] = p
+				}
+
+				if len(countries) == 0 {
+					continue
+				}
+				es = append(es, &common.ObserveEndpoint{
+					URI:       e.URI,
+					Countries: countries,
+				})
+			}
+
+			if len(es) == 0 {
+				return nil
+			}
+
+			new := &common.ObserveResult{
+				Observer:     old.Observer,
+				SourceResult: old.SourceResult,
+				Endpoints:    es,
+			}
+			m.Store(o.Name(), new)
 			return nil
 		})
 	}
@@ -147,7 +203,7 @@ func (a *Availability) Detect() error {
 
 	srs, err := a.load()
 	if err != nil {
-		a.logger.Debug("Availability detector cannot load form sources, error: %s", err)
+		a.logger.Debug("Availability detector cannot load from sources, error: %s", err)
 		return err
 	}
 
