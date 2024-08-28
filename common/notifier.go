@@ -6,7 +6,7 @@ import (
 )
 
 type Notifier interface {
-	Notify([]*VerifierResult) error
+	Notify(vr *VerifyResult) error
 }
 
 type Notifiers struct {

@@ -50,14 +50,14 @@ func (a *Availability) load() ([]*common.SourceResult, error) {
 		return nil, errors.New("Availability detector cannot find sources")
 	}
 
-	g := &errgroup.Group{}
-	m := &sync.Map{}
-
 	sources := a.sources.FindByPattern(a.options.Sources)
 	if len(sources) == 0 {
 		return nil, errors.New("Availability detector has no sources")
 	}
 	keys := slices.Collect(maps.Keys(sources))
+
+	g := &errgroup.Group{}
+	m := &sync.Map{}
 
 	for _, s := range items {
 
@@ -110,14 +110,14 @@ func (a *Availability) observe(sr *common.SourceResult) ([]*common.ObserveResult
 		return nil, errors.New("Availability detector cannot find observers")
 	}
 
-	g := &errgroup.Group{}
-	m := &sync.Map{}
-
 	observersConfig := a.observers.FindConfigurationByPattern(a.options.Observers)
 	if len(observersConfig) == 0 {
 		return nil, errors.New("Availability detector has no observers configurations")
 	}
 	keys := slices.Collect(maps.Keys(observersConfig))
+
+	g := &errgroup.Group{}
+	m := &sync.Map{}
 
 	for _, o := range items {
 
@@ -194,6 +194,97 @@ func (a *Availability) observe(sr *common.SourceResult) ([]*common.ObserveResult
 	return r, nil
 }
 
+func (a *Availability) verify(or *common.ObserveResult) ([]*common.VerifyResult, error) {
+
+	items := a.verifiers.Items()
+	if len(items) == 0 {
+		return nil, errors.New("Availability detector cannot find verifiers")
+	}
+
+	verifiersConfig := a.verifiers.FindConfigurationByPattern(a.options.Verifiers)
+	if len(verifiersConfig) == 0 {
+		return nil, errors.New("Availability detector has no verifiers configurations")
+	}
+	keys := slices.Collect(maps.Keys(verifiersConfig))
+
+	g := &errgroup.Group{}
+	m := &sync.Map{}
+
+	for _, v := range items {
+
+		name := v.Name()
+		if !utils.Contains(keys, name) {
+			continue
+		}
+
+		g.Go(func() error {
+
+			old, err := v.Verify(or)
+			if err != nil {
+				return err
+			}
+
+			probability := float64(0.0)
+			vc := verifiersConfig[name]
+			if vc != nil {
+				probability = vc.Probability
+			}
+
+			es := common.VerifyEndpoints{}
+
+			for _, e := range old.Endpoints {
+
+				if e == nil {
+					continue
+				}
+
+				countries := make(common.VerifyCountries)
+				for k, p := range e.Countries {
+
+					if *p < probability {
+						continue
+					}
+					countries[k] = p
+				}
+
+				if len(countries) == 0 {
+					continue
+				}
+				es = append(es, &common.VerifyEndpoint{
+					URI:       e.URI,
+					Countries: countries,
+				})
+			}
+
+			if len(es) == 0 {
+				return nil
+			}
+
+			new := &common.VerifyResult{
+				Verifier:      old.Verifier,
+				ObserveResult: old.ObserveResult,
+				Endpoints:     es,
+			}
+			m.Store(v.Name(), new)
+			return nil
+		})
+	}
+
+	g.Wait()
+
+	r := []*common.VerifyResult{}
+	m.Range(func(key, value any) bool {
+
+		e, ok := value.(*common.VerifyResult)
+		if !ok {
+			return false
+		}
+		r = append(r, e)
+		return true
+	})
+	return r, nil
+}
+
 func (a *Availability) Detect() error {
 
 	if !a.lock.TryLock() {
@@ -207,17 +298,41 @@ func (a *Availability) Detect() error {
 		return err
 	}
 
+	ors := []*common.ObserveResult{}
 	for _, sr := range srs {
+
+		if sr == nil {
+			continue
+		}
 
 		a.logger.Debug("Availability detector source %s found %d endpoints", sr.Source.Name(), len(sr.Endpoints))
 
-		_, err := a.observe(sr)
+		or, err := a.observe(sr)
 		if err != nil {
-			return err
+			a.logger.Error("Availability detector observe error: %s", err)
+			continue
 		}
+		ors = append(ors, or...)
 	}
 
-	//a.logger.Debug("Availability detector found %d endpoints", len(endpoints))
+	vrs := []*common.VerifyResult{}
+	for _, or := range ors {
+
+		if or == nil {
+			continue
+		}
+
+		a.logger.Debug("Availability detector observer %s found %d endpoints", or.Observer.Name(), len(or.Endpoints))
+
+		vr, err := a.verify(or)
+		if err != nil {
+			a.logger.Error("Availability detector verify error: %s", err)
+			continue
+		}
+		vrs = append(vrs, vr...)
+	}
+
+	a.logger.Debug("Availability detector verifiers %v", vrs)
 
 	return nil
 }

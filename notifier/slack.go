@@ -15,7 +15,7 @@ type Slack struct {
 	logger  sreCommon.Logger
 }
 
-func (s *Slack) Notify([]*common.VerifierResult) error {
+func (s *Slack) Notify(vr *common.VerifyResult) error {
 
 	return nil
 }

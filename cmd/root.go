@@ -18,6 +18,7 @@ import (
 	"github.com/devopsext/detector/verifier"
 	sreCommon "github.com/devopsext/sre/common"
 	sreProvider "github.com/devopsext/sre/provider"
+	"github.com/devopsext/tools/vendors"
 	"github.com/devopsext/utils"
 	"github.com/spf13/cobra"
 )
@@ -73,6 +74,23 @@ var observerDatadog = observer.DatadogOptions{
 	Min:        envGet("OBSERVER_DATADOG_MIN", 0.0).(float64),
 	Max:        envGet("OBSERVER_DATADOG_MAX", 100.0).(float64),
 	Duration:   envGet("OBSERVER_DATADOG_DURATION", "").(string),
+	Timeout:    envGet("OBSERVER_DATADOG_TIMEOUT", "").(string),
+}
+
+var verifierSite24x7 = verifier.Site24x7Options{
+	Site24x7Options: vendors.Site24x7Options{
+		Timeout:      envGet("VERIFIER_SITE24X7_TIMEOUT", 30).(int),
+		Insecure:     envGet("VERIFIER_SITE24X7_INSECURE", false).(bool),
+		ClientID:     envGet("VERIFIER_SITE24X7_CLIENT_ID", "").(string),
+		ClientSecret: envGet("VERIFIER_SITE24X7_CLIENT_SECRET", "").(string),
+		RefreshToken: envGet("VERIFIER_SITE24X7_REFRESH_TOKEN", "").(string),
+	},
+	MonitorName:           envGet("VERIFIER_SITE24X7_MONITOR_NAME", "detector").(string),
+	HttpMethod:            envGet("VERIFIER_SITE24X7_HTTP_METHOD", "GET").(string),
+	HttpUserAgent:         envGet("VERIFIER_SITE24X7_HTTP_USER_AGENT", "detector").(string),
+	NotificationProfileID: envGet("VERIFIER_SITE24X7_NOTIFICATION_PROFILE_ID", "").(string),
+	ThresholdProfileID:    envGet("VERIFIER_SITE24X7_THRESHOLD_PROFILE_ID", "").(string),
+	UserGroupIDs:          strings.Split(envGet("VERIFIER_SITE24X7_USER_GROUP_IDS", "").(string), ","),
 }
 
 var verifierHttp = verifier.HttpOptions{
@@ -178,6 +196,7 @@ func Execute() {
 			observers.Add(observer.NewDatadog(&observerDatadog, obs))
 
 			verifiers := common.NewVerifiers(obs)
+			verifiers.Add(verifier.NewSite24x7(&verifierSite24x7, obs))
 			verifiers.Add(verifier.NewHttp(&verifierHttp, obs))
 
 			notifiers := common.NewNotifiers(obs)
@@ -225,6 +244,19 @@ func Execute() {
 	flags.Float64Var(&observerDatadog.Min, "observer-datadog-min", observerDatadog.Min, "Observer datadog min value")
 	flags.Float64Var(&observerDatadog.Max, "observer-datadog-max", observerDatadog.Max, "Observer datadog max value")
 	flags.StringVar(&observerDatadog.Duration, "observer-datadog-duration", observerDatadog.Duration, "Observer datadog duration")
+	flags.StringVar(&observerDatadog.Timeout, "observer-datadog-timeout", observerDatadog.Timeout, "Observer datadog timeout")
+
+	flags.IntVar(&verifierSite24x7.Site24x7Options.Timeout, "verifier-site24x7-timeout", verifierSite24x7.Site24x7Options.Timeout, "Verifier site24x7 timeout in seconds")
+	flags.BoolVar(&verifierSite24x7.Site24x7Options.Insecure, "verifier-site24x7-insecure", verifierSite24x7.Site24x7Options.Insecure, "Verifier site24x7 insecure")
+	flags.StringVar(&verifierSite24x7.Site24x7Options.ClientID, "verifier-site24x7-client-id", verifierSite24x7.Site24x7Options.ClientID, "Verifier site24x7 client ID")
+	flags.StringVar(&verifierSite24x7.Site24x7Options.ClientSecret, "verifier-site24x7-client-secret", verifierSite24x7.Site24x7Options.ClientSecret, "Verifier site24x7 client secret")
+	flags.StringVar(&verifierSite24x7.Site24x7Options.RefreshToken, "verifier-site24x7-refresh-token", verifierSite24x7.Site24x7Options.RefreshToken, "Verifier site24x7 refresh token")
+	flags.StringVar(&verifierSite24x7.MonitorName, "verifier-site24x7-monitor-name", verifierSite24x7.MonitorName, "Verifier site24x7 monitor name")
+	flags.StringVar(&verifierSite24x7.HttpMethod, "verifier-site24x7-http-method", verifierSite24x7.HttpMethod, "Verifier site24x7 http method")
+	flags.StringVar(&verifierSite24x7.HttpUserAgent, "verifier-site24x7-http-user-agent", verifierSite24x7.HttpUserAgent, "Verifier site24x7 http user agent")
+	flags.StringVar(&verifierSite24x7.NotificationProfileID, "verifier-site24x7-notification-profile-id", verifierSite24x7.NotificationProfileID, "Verifier site24x7 notification profile id")
+	flags.StringVar(&verifierSite24x7.ThresholdProfileID, "verifier-site24x7-threshold-profile-id", verifierSite24x7.ThresholdProfileID, "Verifier site24x7 threshold profile id")
+	flags.StringSliceVar(&verifierSite24x7.UserGroupIDs, "verifier-site24x7-user-group-ids", verifierSite24x7.UserGroupIDs, "Verifier site24x7 user group ids")
 
 	flags.StringVar(&verifierHttp.URL, "verifier-http-url", verifierHttp.URL, "Verfifier http url")
 

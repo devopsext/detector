@@ -15,9 +15,15 @@ type Http struct {
 	logger  sreCommon.Logger
 }
 
-func (h *Http) Verify([]*common.ObserveResult) error {
+const HttpVerifierName = "Config"
 
-	return nil
+func (h *Http) Name() string {
+	return HttpVerifierName
+}
+
+func (h *Http) Verify(or *common.ObserveResult) (*common.VerifyResult, error) {
+
+	return nil, nil
 }
 
 func NewHttp(options *HttpOptions, observability *common.Observability) *Http {

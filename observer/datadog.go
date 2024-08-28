@@ -28,6 +28,7 @@ type DatadogOptions struct {
 	Min        float64
 	Max        float64
 	Duration   string
+	Timeout    string
 }
 
 type DatadogMetricSummary struct {
@@ -74,42 +75,6 @@ func (d *Datadog) getTagValue(ts []string, tag string) string {
 	}
 	return r
 }
-
-/*
-func (d *Datadog) timeseriesCalculate(points []*float64, minLimit, maxLimit float64) *DatadogMetricSummary {
-
-	count := 0
-	sum := float64(0.0)
-
-	// swap min and max
-	min := maxLimit
-	max := minLimit
-
-	for _, p := range points {
-
-		if len(av) < 2 {
-			continue
-		}
-		// use only second cause its timeseries
-		p := av[1]
-		if p == nil {
-			continue
-		}
-		count = count + 1
-		sum = sum + *p
-
-		if *p > max {
-			max = *p
-		}
-		if *p < min {
-			min = *p
-		}
-	}
-
-	avg := sum / float64(count)
-
-}
-*/
 
 func (d *Datadog) timeseriesV1ToData(resp *datadogV1.MetricsQueryResponse, minLimit, maxLimit float64) DatadogMetricData {
 
@@ -412,7 +377,7 @@ func (d *Datadog) Observe(sr *common.SourceResult) (*common.ObserveResult, error
 		return nil, nil
 	}
 
-	es := []*common.ObserveEndpoint{}
+	es := common.ObserveEndpoints{}
 
 	for _, e := range sr.Endpoints {
 
@@ -486,6 +451,14 @@ func NewDatadog(options *DatadogOptions, observability *common.Observability) *D
 	config.SetUnstableOperationEnabled("v2.QueryTimeseriesData", true)
 
 	client := datadog.NewAPIClient(config)
+
+	if !utils.IsEmpty(options.Timeout) {
+		d, err := time.ParseDuration(options.Timeout)
+		if err == nil && config.HTTPClient != nil {
+			config.HTTPClient.Timeout = d
+		}
+	}
+
 	apiV1 := datadogV1.NewMetricsApi(client)
 	apiV2 := datadogV2.NewMetricsApi(client)
 

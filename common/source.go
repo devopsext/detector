@@ -8,7 +8,13 @@ import (
 	"github.com/devopsext/utils"
 )
 
-type SourceEndpoints = []*Endpoint
+type SourceEndpoint struct {
+	URI       string
+	Disabled  bool
+	Countries []string
+}
+
+type SourceEndpoints = []*SourceEndpoint
 
 type SourceResult struct {
 	Source    Source

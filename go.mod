@@ -4,11 +4,14 @@ go 1.23
 
 replace gopkg.in/DataDog/dd-trace-go.v1 => github.com/devopsext/dd-trace-go v1.31.2
 
-replace github.com/devopsext/utils => ../utils/
+//replace github.com/devopsext/utils => ../utils/
+
+replace github.com/devopsext/tools => ../tools/
 
 require (
 	github.com/DataDog/datadog-api-client-go/v2 v2.29.0
 	github.com/devopsext/sre v0.5.1
+	github.com/devopsext/tools v0.15.1
 	github.com/devopsext/utils v0.4.3
 	github.com/go-co-op/gocron v1.37.0
 	github.com/spf13/cobra v1.8.1
@@ -23,6 +26,7 @@ require (
 	github.com/DataDog/zstd v1.5.2 // indirect
 	github.com/Microsoft/go-winio v0.5.0 // indirect
 	github.com/VictoriaMetrics/metrics v1.33.1 // indirect
+	github.com/blues/jsonata-go v1.5.4 // indirect
 	github.com/cenkalti/backoff/v4 v4.1.2 // indirect
 	github.com/go-logr/logr v1.3.0 // indirect
 	github.com/go-logr/stdr v1.2.0 // indirect
@@ -32,6 +36,7 @@ require (
 	github.com/google/uuid v1.5.0 // indirect
 	github.com/grpc-ecosystem/grpc-gateway v1.16.0 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
+	github.com/jinzhu/copier v0.4.0 // indirect
 	github.com/newrelic/newrelic-telemetry-sdk-go v0.8.1 // indirect
 	github.com/opentracing/opentracing-go v1.2.0 // indirect
 	github.com/philhofer/fwd v1.1.1 // indirect
