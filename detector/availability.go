@@ -88,7 +88,10 @@ func (a *Availability) load() ([]*common.SourceResult, error) {
 		})
 	}
 
-	g.Wait()
+	err := g.Wait()
+	if err != nil {
+		return nil, err
+	}
 
 	r := []*common.SourceResult{}
 	m.Range(func(key, value any) bool {
@@ -179,7 +182,10 @@ func (a *Availability) observe(sr *common.SourceResult) ([]*common.ObserveResult
 		})
 	}
 
-	g.Wait()
+	err := g.Wait()
+	if err != nil {
+		return nil, err
+	}
 
 	r := []*common.ObserveResult{}
 	m.Range(func(key, value any) bool {
@@ -270,7 +276,10 @@ func (a *Availability) verify(or *common.ObserveResult) ([]*common.VerifyResult,
 		})
 	}
 
-	g.Wait()
+	err := g.Wait()
+	if err != nil {
+		return nil, err
+	}
 
 	r := []*common.VerifyResult{}
 	m.Range(func(key, value any) bool {

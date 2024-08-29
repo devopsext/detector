@@ -1,11 +1,21 @@
 package common
 
-import "strings"
+import (
+	"crypto/md5"
+	"fmt"
+)
 
-func NormalizeCountry(s string) string {
-	return strings.ToUpper(s)
+func Md5(b []byte) []byte {
+	h := md5.New()
+	h.Write(b)
+	return h.Sum(nil)
 }
 
-func NormalizeURI(s string) string {
-	return strings.ToLower(s)
+func Md5ToString(b []byte) string {
+
+	hash := Md5(b)
+	if hash != nil {
+		return fmt.Sprintf("%x", hash)
+	}
+	return ""
 }

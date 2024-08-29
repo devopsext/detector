@@ -86,11 +86,15 @@ var verifierSite24x7 = verifier.Site24x7Options{
 		RefreshToken: envGet("VERIFIER_SITE24X7_REFRESH_TOKEN", "").(string),
 	},
 	MonitorName:           envGet("VERIFIER_SITE24X7_MONITOR_NAME", "detector").(string),
+	MonitorFrequency:      envGet("VERIFIER_SITE24X7_MONITOR_FREQUENCY", "1440").(string),
+	MonitorTimeout:        envGet("VERIFIER_SITE24X7_MONITOR_TIMEOUT", 30).(int),
 	HttpMethod:            envGet("VERIFIER_SITE24X7_HTTP_METHOD", "GET").(string),
 	HttpUserAgent:         envGet("VERIFIER_SITE24X7_HTTP_USER_AGENT", "detector").(string),
 	NotificationProfileID: envGet("VERIFIER_SITE24X7_NOTIFICATION_PROFILE_ID", "").(string),
 	ThresholdProfileID:    envGet("VERIFIER_SITE24X7_THRESHOLD_PROFILE_ID", "").(string),
 	UserGroupIDs:          strings.Split(envGet("VERIFIER_SITE24X7_USER_GROUP_IDS", "").(string), ","),
+	PollTimeout:           envGet("VERIFIER_SITE24X7_POLL_TIMEOUT", 60).(int),
+	PollDelay:             envGet("VERIFIER_SITE24X7_POLL_DELAY", 500).(int),
 }
 
 var verifierHttp = verifier.HttpOptions{
@@ -252,11 +256,15 @@ func Execute() {
 	flags.StringVar(&verifierSite24x7.Site24x7Options.ClientSecret, "verifier-site24x7-client-secret", verifierSite24x7.Site24x7Options.ClientSecret, "Verifier site24x7 client secret")
 	flags.StringVar(&verifierSite24x7.Site24x7Options.RefreshToken, "verifier-site24x7-refresh-token", verifierSite24x7.Site24x7Options.RefreshToken, "Verifier site24x7 refresh token")
 	flags.StringVar(&verifierSite24x7.MonitorName, "verifier-site24x7-monitor-name", verifierSite24x7.MonitorName, "Verifier site24x7 monitor name")
+	flags.StringVar(&verifierSite24x7.MonitorFrequency, "verifier-site24x7-monitor-frequency", verifierSite24x7.MonitorFrequency, "Verifier site24x7 monitor frequency")
+	flags.IntVar(&verifierSite24x7.MonitorTimeout, "verifier-site24x7-monitor-timeout", verifierSite24x7.MonitorTimeout, "Verifier site24x7 monitor timeout")
 	flags.StringVar(&verifierSite24x7.HttpMethod, "verifier-site24x7-http-method", verifierSite24x7.HttpMethod, "Verifier site24x7 http method")
 	flags.StringVar(&verifierSite24x7.HttpUserAgent, "verifier-site24x7-http-user-agent", verifierSite24x7.HttpUserAgent, "Verifier site24x7 http user agent")
 	flags.StringVar(&verifierSite24x7.NotificationProfileID, "verifier-site24x7-notification-profile-id", verifierSite24x7.NotificationProfileID, "Verifier site24x7 notification profile id")
 	flags.StringVar(&verifierSite24x7.ThresholdProfileID, "verifier-site24x7-threshold-profile-id", verifierSite24x7.ThresholdProfileID, "Verifier site24x7 threshold profile id")
 	flags.StringSliceVar(&verifierSite24x7.UserGroupIDs, "verifier-site24x7-user-group-ids", verifierSite24x7.UserGroupIDs, "Verifier site24x7 user group ids")
+	flags.IntVar(&verifierSite24x7.PollTimeout, "verifier-site24x7-poll-timeout", verifierSite24x7.PollTimeout, "Verifier site24x7 poll timeout in seconds")
+	flags.IntVar(&verifierSite24x7.PollDelay, "verifier-site24x7-poll-delay", verifierSite24x7.PollDelay, "Verifier site24x7 poll delay in milliseconds")
 
 	flags.StringVar(&verifierHttp.URL, "verifier-http-url", verifierHttp.URL, "Verfifier http url")
 

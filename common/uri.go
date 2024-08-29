@@ -38,13 +38,18 @@ func URIParse(uri string) (*URI, error) {
 		return nil, err
 	}
 
+	port := u.Port()
 	scheme := u.Scheme
 	if utils.IsEmpty(scheme) {
-		scheme = URISchemeHttps
+
+		if utils.IsEmpty(port) {
+			scheme = URISchemeHttps
+		} else if port == "80" {
+			scheme = URISchemeHttp
+		}
 	}
 	scheme = strings.ToLower(scheme)
 
-	port := u.Port()
 	if utils.IsEmpty(port) {
 		switch u.Scheme {
 		case URIPortHttp:
@@ -87,4 +92,12 @@ func URIScheme(uri string) string {
 		return ""
 	}
 	return u.Scheme
+}
+
+func NormalizeCountry(s string) string {
+	return strings.ToUpper(s)
+}
+
+func NormalizeURI(s string) string {
+	return strings.ToLower(s)
 }

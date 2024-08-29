@@ -11,9 +11,10 @@ replace github.com/devopsext/tools => ../tools/
 require (
 	github.com/DataDog/datadog-api-client-go/v2 v2.29.0
 	github.com/devopsext/sre v0.5.1
-	github.com/devopsext/tools v0.15.1
+	github.com/devopsext/tools v0.15.3
 	github.com/devopsext/utils v0.4.3
 	github.com/go-co-op/gocron v1.37.0
+	github.com/jinzhu/copier v0.4.0
 	github.com/spf13/cobra v1.8.1
 	golang.org/x/sync v0.0.0-20210220032951-036812b2e83c
 	gopkg.in/yaml.v2 v2.2.3
@@ -36,7 +37,6 @@ require (
 	github.com/google/uuid v1.5.0 // indirect
 	github.com/grpc-ecosystem/grpc-gateway v1.16.0 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
-	github.com/jinzhu/copier v0.4.0 // indirect
 	github.com/newrelic/newrelic-telemetry-sdk-go v0.8.1 // indirect
 	github.com/opentracing/opentracing-go v1.2.0 // indirect
 	github.com/philhofer/fwd v1.1.1 // indirect
