@@ -70,7 +70,7 @@ var observerDatadog = observer.DatadogOptions{
 	TagUri:     envGet("OBSERVER_DATADOG_TAG_URI", "").(string),
 	TagCountry: envGet("OBSERVER_DATADOG_TAG_COUNTRY", "").(string),
 	Query:      envFileContentExpand("OBSERVER_DATADOG_QUERY", ""),
-	File:       envFileContentExpand("OBSERVER_DATADOG_FILE", ""),
+	File:       envGet("OBSERVER_DATADOG_FILE", "").(string),
 	Min:        envGet("OBSERVER_DATADOG_MIN", 0.0).(float64),
 	Max:        envGet("OBSERVER_DATADOG_MAX", 100.0).(float64),
 	Duration:   envGet("OBSERVER_DATADOG_DURATION", "").(string),
@@ -93,8 +93,9 @@ var verifierSite24x7 = verifier.Site24x7Options{
 	NotificationProfileID: envGet("VERIFIER_SITE24X7_NOTIFICATION_PROFILE_ID", "").(string),
 	ThresholdProfileID:    envGet("VERIFIER_SITE24X7_THRESHOLD_PROFILE_ID", "").(string),
 	UserGroupIDs:          strings.Split(envGet("VERIFIER_SITE24X7_USER_GROUP_IDS", "").(string), ","),
-	PollTimeout:           envGet("VERIFIER_SITE24X7_POLL_TIMEOUT", 60).(int),
+	PollTimeout:           envGet("VERIFIER_SITE24X7_POLL_TIMEOUT", 160).(int),
 	PollDelay:             envGet("VERIFIER_SITE24X7_POLL_DELAY", 500).(int),
+	LogReportFile:         envGet("VERIFIER_SITE24X7_LOG_REPORT_FILE", "").(string),
 }
 
 var verifierHttp = verifier.HttpOptions{
@@ -265,6 +266,7 @@ func Execute() {
 	flags.StringSliceVar(&verifierSite24x7.UserGroupIDs, "verifier-site24x7-user-group-ids", verifierSite24x7.UserGroupIDs, "Verifier site24x7 user group ids")
 	flags.IntVar(&verifierSite24x7.PollTimeout, "verifier-site24x7-poll-timeout", verifierSite24x7.PollTimeout, "Verifier site24x7 poll timeout in seconds")
 	flags.IntVar(&verifierSite24x7.PollDelay, "verifier-site24x7-poll-delay", verifierSite24x7.PollDelay, "Verifier site24x7 poll delay in milliseconds")
+	flags.StringVar(&verifierSite24x7.LogReportFile, "verifier-site24x7-log-report-id", verifierSite24x7.LogReportFile, "Verifier site24x7log report file")
 
 	flags.StringVar(&verifierHttp.URL, "verifier-http-url", verifierHttp.URL, "Verfifier http url")
 

@@ -10,11 +10,20 @@ import (
 )
 
 type VerifyProbability = float64
-type VerifyCountries = map[string]*VerifyProbability
+
+type VerifyStatusFlag = int
+
+type VerifyStatus struct {
+	Probability *VerifyProbability
+	Flags       []VerifyStatusFlag
+}
+
+type VerifyCountries = map[string]VerifyStatus
 
 type VerifyEndpoint struct {
-	URI       string
-	Countries VerifyCountries
+	URI             string
+	Countries       VerifyCountries
+	ObserveEndpoint *ObserveEndpoint
 }
 
 type VerifyEndpoints = []*VerifyEndpoint

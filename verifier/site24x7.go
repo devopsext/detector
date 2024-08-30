@@ -13,6 +13,7 @@ import (
 
 	"github.com/devopsext/detector/common"
 	sreCommon "github.com/devopsext/sre/common"
+	tools "github.com/devopsext/tools/common"
 	vendors "github.com/devopsext/tools/vendors"
 	"github.com/devopsext/utils"
 	"github.com/jinzhu/copier"
@@ -31,6 +32,14 @@ type Site24x7Options struct {
 	UserGroupIDs          []string
 	PollTimeout           int
 	PollDelay             int
+	LogReportFile         string
+}
+
+type Site24x7Summary struct {
+	Country string
+	Avg     float64
+	IPs     []string
+	Codes   []string
 }
 
 type Site24x7 struct {
@@ -215,7 +224,7 @@ func (s *Site24x7) waitPollSuccessOrCancel(ctx context.Context, token, ID string
 
 func (s *Site24x7) getLogReport(token, ID string) (*vendors.Site24x7LogReportReponse, error) {
 
-	start := ""
+	start := time.Now().Format("2006-01-02")
 	end := ""
 
 	opts := s.cloneSite24x7Options(s.options.Site24x7Options, token)
@@ -246,16 +255,16 @@ func (s *Site24x7) getLogReport(token, ID string) (*vendors.Site24x7LogReportRep
 	return &r, nil
 }
 
-func (s *Site24x7) verifyHttp(oe *common.ObserveEndpoint, token, scheme string, countries []string) error {
+func (s *Site24x7) verifyHttp(oe *common.ObserveEndpoint, token, scheme string, countries []string) (*vendors.Site24x7LogReportData, error) {
 
 	wmr, err := s.createWebsiteMonitor(token, scheme, oe.URI, countries)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	_, err = s.pollNow(token, wmr.Data.MonitorID)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	var cancel context.CancelFunc
@@ -281,12 +290,142 @@ func (s *Site24x7) verifyHttp(oe *common.ObserveEndpoint, token, scheme string, 
 	}
 
 	if lerr != nil {
-		return fmt.Errorf("Site24x7 cannot get log report for endpoint: %s", oe.URI, lerr)
+		return nil, lerr
 	}
 
-	//lrr.Data.Report
+	if lrr == nil || lrr.Data == nil {
+		return nil, nil
+	}
 
-	return nil
+	return lrr.Data, nil
+}
+
+func (s *Site24x7) loadLogReport(file string) (*vendors.Site24x7LogReportData, error) {
+
+	data, err := utils.Content(file)
+	if err != nil {
+		return nil, err
+	}
+
+	var lrr vendors.Site24x7LogReportReponse
+	err = json.Unmarshal(data, &lrr)
+	if err != nil {
+		return nil, err
+	}
+
+	if lrr.Data == nil {
+		return nil, nil
+	}
+	return lrr.Data, nil
+}
+
+func (s *Site24x7) getLocationTemplate(token string) (*vendors.Site24x7LocationTemplateReponse, error) {
+
+	opts := s.cloneSite24x7Options(s.options.Site24x7Options, token)
+
+	d, err := s.client.CustomGetLocationTemplate(opts)
+	if err != nil {
+		return nil, s.client.CheckError(d, err)
+	}
+
+	ltr := vendors.Site24x7LocationTemplateReponse{}
+	err = json.Unmarshal(d, &ltr)
+	if err != nil {
+		return nil, err
+	}
+
+	err = s.client.CheckResponse(ltr.Site24x7Reponse)
+	if err != nil {
+		return nil, err
+	}
+	return &ltr, nil
+}
+
+func (s *Site24x7) findCountryByLocation(ltd *vendors.Site24x7LocationTemplateData, locationID string) string {
+
+	if ltd == nil {
+		return ""
+	}
+	for _, l := range ltd.Locations {
+
+		if l.LocationID != locationID {
+			continue
+		}
+
+		short := tools.CountryShort(l.CountryName)
+		if !utils.IsEmpty(short) {
+			return short
+		}
+	}
+	return ""
+}
+
+func (s *Site24x7) getLogReportSummary(oe *common.ObserveEndpoint, locations *vendors.Site24x7LocationTemplateReponse,
+	report []*vendors.Site24x7LogReportDataReport, collectionType string) []*Site24x7Summary {
+
+	r := []*Site24x7Summary{}
+
+	type summary struct {
+		availability float64
+		ip           string
+		code         string
+	}
+
+	//reAvailability := regexp.Compile()
+
+	m := make(map[string][]summary)
+
+	for _, dr := range report {
+
+		if dr.DataCollectionType != collectionType {
+			continue
+		}
+
+		country := s.findCountryByLocation(locations.Data, dr.LocationID)
+		if utils.IsEmpty(country) {
+			continue
+		}
+
+		sm := m[country]
+		if sm == nil {
+			sm = []summary{}
+		}
+
+		availability := float64(0.0)
+		if dr.Availability == "1" {
+			availability = float64(100.0)
+		}
+
+		sm = append(sm, summary{
+			availability: availability,
+			ip:           dr.ResolvedIP,
+		})
+
+		m[country] = sm
+	}
+
+	for k, v := range m {
+
+		sum := float64(0.0)
+		ips := []string{}
+
+		for _, sm := range v {
+
+			sum = sum + sm.availability
+			if !utils.Contains(ips, sm.ip) {
+				ips = append(ips, sm.ip)
+			}
+		}
+
+		avg := sum / float64(len(v))
+
+		r = append(r, &Site24x7Summary{
+			Country: k,
+			Avg:     avg,
+			IPs:     ips,
+		})
+	}
+	return r
 }
 
 func (s *Site24x7) Verify(or *common.ObserveResult) (*common.VerifyResult, error) {
@@ -300,39 +439,69 @@ func (s *Site24x7) Verify(or *common.ObserveResult) (*common.VerifyResult, error
 		return nil, err
 	}
 
+	locations, err := s.getLocationTemplate(token)
+	if err != nil {
+		return nil, err
+	}
+
 	g := &errgroup.Group{}
+	//m := &sync.Map{}
 
 	for _, oe := range or.Endpoints {
 
 		g.Go(func() error {
 
-			countries := slices.Collect(maps.Keys(oe.Countries))
-			if len(countries) == 0 {
+			var rd *vendors.Site24x7LogReportData
+			var err error
+
+			if utils.FileExists(s.options.LogReportFile) {
+
+				rd, err = s.loadLogReport(s.options.LogReportFile)
+
+			} else {
+
+				countries := slices.Collect(maps.Keys(oe.Countries))
+				if len(countries) == 0 {
+					return nil
+				}
+				scheme := common.URIScheme(oe.URI)
+
+				switch scheme {
+				case common.URISchemeHttp, common.URISchemeHttps:
+					rd, err = s.verifyHttp(oe, token, scheme, countries)
+				default:
+					return fmt.Errorf("Site24x7 has no support for endpoint: %s", oe.URI)
+				}
+			}
+
+			if err != nil {
+				return fmt.Errorf("Site24x7 has error: %s", err)
+			}
+
+			if rd == nil {
 				return nil
 			}
-			scheme := common.URIScheme(oe.URI)
 
-			switch scheme {
-			case common.URISchemeHttp, common.URISchemeHttps:
-				return s.verifyHttp(oe, token, scheme, countries)
-			default:
-				return fmt.Errorf("Site24x7 has no support for endpoint: %s", oe.URI)
+			rs := s.getLogReportSummary(oe, locations, rd.Report, vendors.Site24x7DataCollectionTypePollNow)
+
+			for _, r := range rs {
+
+				/*
+					  availability 1/0
+						response_code
+						resolved_ip
+				*/
+				s.logger.Debug("%v", r)
 			}
+
+			//m.Store(or.Name(), new)
+			return nil
 		})
 	}
 	err = g.Wait()
 	if err != nil {
 		return nil, err
 	}
-
-	/*
-		  - create new monitor for certain endpoints and countries, including location profile
-			- if its suspended, resume it
-			- initiate poll now check
-			- wait until polling status will be success/error
-			- get log report, check ip addresses and unvailability
-			- delete location profile, and monitor
-	*/
 
 	vs := common.VerifyEndpoints{}
 

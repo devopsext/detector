@@ -13,8 +13,9 @@ type ObserveProbability = float64
 type ObserveCountries = map[string]*ObserveProbability
 
 type ObserveEndpoint struct {
-	URI       string
-	Countries ObserveCountries
+	URI            string
+	Countries      ObserveCountries
+	SourceEndpoint *SourceEndpoint
 }
 
 type ObserveEndpoints = []*ObserveEndpoint

@@ -163,8 +163,9 @@ func (a *Availability) observe(sr *common.SourceResult) ([]*common.ObserveResult
 					continue
 				}
 				es = append(es, &common.ObserveEndpoint{
-					URI:       e.URI,
-					Countries: countries,
+					URI:            e.URI,
+					Countries:      countries,
+					SourceEndpoint: e.SourceEndpoint,
 				})
 			}
 
@@ -245,20 +246,22 @@ func (a *Availability) verify(or *common.ObserveResult) ([]*common.VerifyResult,
 				}
 
 				countries := make(common.VerifyCountries)
-				for k, p := range e.Countries {
+				for k, s := range e.Countries {
 
+					p := s.Probability
 					if *p < probability {
 						continue
 					}
-					countries[k] = p
+					countries[k] = s
 				}
 
 				if len(countries) == 0 {
 					continue
 				}
 				es = append(es, &common.VerifyEndpoint{
-					URI:       e.URI,
-					Countries: countries,
+					URI:             e.URI,
+					Countries:       countries,
+					ObserveEndpoint: e.ObserveEndpoint,
 				})
 			}
 

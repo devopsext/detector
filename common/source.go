@@ -8,10 +8,16 @@ import (
 	"github.com/devopsext/utils"
 )
 
+type SourceEndpointResponse struct {
+	Code    string `json:"code,omitempty"`
+	Content string `json:"content,omitempty"`
+}
+
 type SourceEndpoint struct {
-	URI       string
-	Disabled  bool
-	Countries []string
+	URI       string                  `json:"uri"`
+	Disabled  bool                    `json:"disabled"`
+	Countries []string                `json:"countries,omitempty"`
+	Response  *SourceEndpointResponse `json:"response,omitempty"`
 }
 
 type SourceEndpoints = []*SourceEndpoint

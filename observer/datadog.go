@@ -138,8 +138,13 @@ func (d *Datadog) timeseriesV1ToData(resp *datadogV1.MetricsQueryResponse, minLi
 
 func (d *Datadog) loadV1File(file string) (DatadogMetricData, error) {
 
+	data, err := utils.Content(file)
+	if err != nil {
+		return nil, err
+	}
+
 	var resp datadogV1.MetricsQueryResponse
-	err := json.Unmarshal([]byte(file), &resp)
+	err = json.Unmarshal(data, &resp)
 	if err != nil {
 		return nil, err
 	}
@@ -347,7 +352,7 @@ func (d *Datadog) Observe(sr *common.SourceResult) (*common.ObserveResult, error
 
 	var md DatadogMetricData
 
-	if !utils.IsEmpty(d.options.File) {
+	if utils.FileExists(d.options.File) {
 
 		mf, err := d.loadV1File(d.options.File)
 		if err != nil {
@@ -408,8 +413,9 @@ func (d *Datadog) Observe(sr *common.SourceResult) (*common.ObserveResult, error
 		}
 
 		e := &common.ObserveEndpoint{
-			URI:       uri,
-			Countries: countries,
+			URI:            uri,
+			Countries:      countries,
+			SourceEndpoint: e,
 		}
 		es = append(es, e)
 	}
