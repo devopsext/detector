@@ -7,8 +7,10 @@ import (
 	"fmt"
 	"maps"
 	"net/url"
+	"regexp"
 	"slices"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/devopsext/detector/common"
@@ -38,8 +40,7 @@ type Site24x7Options struct {
 type Site24x7Summary struct {
 	Country string
 	Avg     float64
-	IPs     []string
-	Codes   []string
+	Flags   map[common.VerifyStatusFlag]bool
 }
 
 type Site24x7 struct {
@@ -367,11 +368,24 @@ func (s *Site24x7) getLogReportSummary(oe *common.ObserveEndpoint, locations *ve
 
 	type summary struct {
 		availability float64
-		ip           string
-		code         string
+		flags        common.VerifyStatusFlags
 	}
 
-	//reAvailability := regexp.Compile()
+	response := oe.SourceEndpoint.Response
+
+	var reCode *regexp.Regexp
+	if response != nil && !utils.IsEmpty(response.Code) {
+		reCode, _ = regexp.Compile(response.Code)
+	}
+
+	reIPs := make(map[string]*regexp.Regexp)
+	for _, ip := range oe.SourceEndpoint.IPs {
+		reIP, _ := regexp.Compile(ip)
+		if reIP == nil {
+			continue
+		}
+		reIPs[ip] = reIP
+	}
 
 	m := make(map[string][]summary)
 
@@ -385,6 +399,7 @@ func (s *Site24x7) getLogReportSummary(oe *common.ObserveEndpoint, locations *ve
 		if utils.IsEmpty(country) {
 			continue
 		}
+		country = common.NormalizeCountry(country)
 
 		sm := m[country]
 		if sm == nil {
@@ -396,24 +411,44 @@ func (s *Site24x7) getLogReportSummary(oe *common.ObserveEndpoint, locations *ve
 			availability = float64(100.0)
 		}
 
+		flags := make(common.VerifyStatusFlags)
+
+		if len(oe.SourceEndpoint.IPs) > 0 {
+			exists := false
+			for _, v := range reIPs {
+				if v.MatchString(dr.ResolvedIP) {
+					exists = true
+					break
+				}
+			}
+			flags[common.VerifyStatusFlagWrongIPAddress] = !exists
+		}
+
+		if reCode != nil {
+			if !reCode.MatchString(dr.ResponseCode) {
+				flags[common.VerifyStatusFlagWrongResponseCode] = true
+			}
+		}
+
 		sm = append(sm, summary{
 			availability: availability,
-			ip:           dr.ResolvedIP,
+			flags:        flags,
 		})
-
 		m[country] = sm
 	}
 
 	for k, v := range m {
 
+		flags := make(common.VerifyStatusFlags)
 		sum := float64(0.0)
-		ips := []string{}
 
 		for _, sm := range v {
-
 			sum = sum + sm.availability
-			if !utils.Contains(ips, sm.ip) {
-				ips = append(ips, sm.ip)
+
+			for k, v := range sm.flags {
+				if v {
+					flags[k] = v
+				}
 			}
 		}
 
@@ -422,7 +457,7 @@ func (s *Site24x7) getLogReportSummary(oe *common.ObserveEndpoint, locations *ve
 		r = append(r, &Site24x7Summary{
 			Country: k,
 			Avg:     avg,
-			IPs:     ips,
+			Flags:   flags,
 		})
 	}
 	return r
@@ -445,12 +480,13 @@ func (s *Site24x7) Verify(or *common.ObserveResult) (*common.VerifyResult, error
 	}
 
 	g := &errgroup.Group{}
-	//m := &sync.Map{}
+	m := &sync.Map{}
 
 	for _, oe := range or.Endpoints {
 
 		g.Go(func() error {
 
+			uri := common.NormalizeURI(oe.URI)
 			var rd *vendors.Site24x7LogReportData
 			var err error
 
@@ -464,13 +500,13 @@ func (s *Site24x7) Verify(or *common.ObserveResult) (*common.VerifyResult, error
 				if len(countries) == 0 {
 					return nil
 				}
-				scheme := common.URIScheme(oe.URI)
+				scheme := common.URIScheme(uri)
 
 				switch scheme {
 				case common.URISchemeHttp, common.URISchemeHttps:
 					rd, err = s.verifyHttp(oe, token, scheme, countries)
 				default:
-					return fmt.Errorf("Site24x7 has no support for endpoint: %s", oe.URI)
+					return fmt.Errorf("Site24x7 has no support for endpoint: %s", uri)
 				}
 			}
 
@@ -482,19 +518,24 @@ func (s *Site24x7) Verify(or *common.ObserveResult) (*common.VerifyResult, error
 				return nil
 			}
 
-			rs := s.getLogReportSummary(oe, locations, rd.Report, vendors.Site24x7DataCollectionTypePollNow)
-
-			for _, r := range rs {
-
-				/*
-					  availability 1/0
-						response_code
-						resolved_ip
-				*/
-				s.logger.Debug("%v", r)
+			ve := &common.VerifyEndpoint{
+				URI:             uri,
+				Countries:       common.VerifyCountries{},
+				ObserveEndpoint: oe,
 			}
 
-			//m.Store(or.Name(), new)
+			rs := s.getLogReportSummary(oe, locations, rd.Report, vendors.Site24x7DataCollectionTypePollNow)
+			for _, r := range rs {
+
+				vs := ve.Countries[r.Country]
+				if vs == nil {
+					vs = &common.VerifyStatus{}
+				}
+				vs.Probability = &r.Avg
+				vs.Flags = r.Flags
+				ve.Countries[r.Country] = vs
+			}
+			m.Store(nil, ve)
 			return nil
 		})
 	}
@@ -504,6 +545,15 @@ func (s *Site24x7) Verify(or *common.ObserveResult) (*common.VerifyResult, error
 	}
 
 	vs := common.VerifyEndpoints{}
+	m.Range(func(key, value any) bool {
+
+		e, ok := value.(*common.VerifyEndpoint)
+		if !ok {
+			return false
+		}
+		vs = append(vs, e)
+		return true
+	})
 
 	r := &common.VerifyResult{
 		Verifier:      s,

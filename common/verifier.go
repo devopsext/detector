@@ -11,14 +11,20 @@ import (
 
 type VerifyProbability = float64
 
-type VerifyStatusFlag = int
+type VerifyStatusFlag = string
+type VerifyStatusFlags = map[VerifyStatusFlag]bool
+
+const (
+	VerifyStatusFlagWrongIPAddress    VerifyStatusFlag = "wrong_ip_address"
+	VerifyStatusFlagWrongResponseCode VerifyStatusFlag = "wrong_response_code"
+)
 
 type VerifyStatus struct {
 	Probability *VerifyProbability
-	Flags       []VerifyStatusFlag
+	Flags       VerifyStatusFlags
 }
 
-type VerifyCountries = map[string]VerifyStatus
+type VerifyCountries = map[string]*VerifyStatus
 
 type VerifyEndpoint struct {
 	URI             string

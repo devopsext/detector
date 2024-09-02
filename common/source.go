@@ -17,6 +17,7 @@ type SourceEndpoint struct {
 	URI       string                  `json:"uri"`
 	Disabled  bool                    `json:"disabled"`
 	Countries []string                `json:"countries,omitempty"`
+	IPs       []string                `json:"ips,omitempty"`
 	Response  *SourceEndpointResponse `json:"response,omitempty"`
 }
 
