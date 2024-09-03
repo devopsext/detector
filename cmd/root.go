@@ -103,7 +103,13 @@ var verifierHttp = verifier.HttpOptions{
 }
 
 var notifierSlack = notifier.SlackOptions{
-	Token: envGet("NOTIFIER_SLACK_URL", "").(string),
+	SlackOptions: vendors.SlackOptions{
+		Timeout:  envGet("NOTIFIER_SLACK_TIMEOUT", 30).(int),
+		Insecure: envGet("NOTIFIER_SLACK_INSECURE", false).(bool),
+		Token:    envGet("NOTIFIER_SLACK_TOKEN", "").(string),
+		Channel:  envGet("NOTIFIER_SLACK_CHANNEL", "").(string),
+		Thread:   envGet("NOTIFIER_SLACK_THREAD", "").(string),
+	},
 }
 
 var detectorAvailability = detector.AvailabilityOptions{
@@ -270,7 +276,11 @@ func Execute() {
 
 	flags.StringVar(&verifierHttp.URL, "verifier-http-url", verifierHttp.URL, "Verfifier http url")
 
-	flags.StringVar(&notifierSlack.Token, "notifier-slack-token", notifierSlack.Token, "Notifier slack token")
+	flags.IntVar(&notifierSlack.SlackOptions.Timeout, "notifier-slack-timeout", notifierSlack.SlackOptions.Timeout, "Notifier slack timeout")
+	flags.BoolVar(&notifierSlack.SlackOptions.Insecure, "verifier-slack-insecure", notifierSlack.SlackOptions.Insecure, "Notifier slack insecure")
+	flags.StringVar(&notifierSlack.SlackOptions.Token, "verifier-slack-token", notifierSlack.SlackOptions.Token, "Notifier slack token")
+	flags.StringVar(&notifierSlack.SlackOptions.Channel, "verifier-slack-channel", notifierSlack.SlackOptions.Channel, "Notifier slack channel")
+	flags.StringVar(&notifierSlack.SlackOptions.Thread, "verifier-slack-thread", notifierSlack.SlackOptions.Thread, "Notifier slack thread")
 
 	flags.StringVar(&detectorAvailability.Schedule, "detector-availability-schedule", detectorAvailability.Schedule, "Detector availability schedule")
 	flags.StringVar(&detectorAvailability.Sources, "detector-availability-sources", detectorAvailability.Sources, "Detector availability sources")

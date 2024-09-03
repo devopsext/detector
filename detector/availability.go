@@ -83,7 +83,7 @@ func (a *Availability) load() ([]*common.SourceResult, error) {
 				}
 				r.Endpoints = append(r.Endpoints, e)
 			}
-			m.Store(name, r)
+			m.Store(nil, r)
 			return nil
 		})
 	}
@@ -178,7 +178,7 @@ func (a *Availability) observe(sr *common.SourceResult) ([]*common.ObserveResult
 				SourceResult: old.SourceResult,
 				Endpoints:    es,
 			}
-			m.Store(o.Name(), new)
+			m.Store(nil, new)
 			return nil
 		})
 	}
@@ -274,7 +274,7 @@ func (a *Availability) verify(or *common.ObserveResult) ([]*common.VerifyResult,
 				ObserveResult: old.ObserveResult,
 				Endpoints:     es,
 			}
-			m.Store(v.Name(), new)
+			m.Store(nil, new)
 			return nil
 		})
 	}
@@ -288,6 +288,102 @@ func (a *Availability) verify(or *common.ObserveResult) ([]*common.VerifyResult,
 	m.Range(func(key, value any) bool {
 
 		e, ok := value.(*common.VerifyResult)
+		if !ok {
+			return false
+		}
+		r = append(r, e)
+		return true
+	})
+	return r, nil
+}
+
+func (a *Availability) notify(vr *common.VerifyResult) ([]*common.NotifyResult, error) {
+
+	items := a.notifiers.Items()
+	if len(items) == 0 {
+		return nil, errors.New("Availability detector cannot find notifiers")
+	}
+
+	notifiersConfig := a.notifiers.FindConfigurationByPattern(a.options.Notifiers)
+	if len(notifiersConfig) == 0 {
+		return nil, errors.New("Availability detector has no notifiers configurations")
+	}
+	keys := slices.Collect(maps.Keys(notifiersConfig))
+
+	g := &errgroup.Group{}
+	m := &sync.Map{}
+
+	for _, n := range items {
+
+		name := n.Name()
+		if !utils.Contains(keys, name) {
+			continue
+		}
+
+		g.Go(func() error {
+
+			_, err := n.Notify(vr)
+			if err != nil {
+				return err
+			}
+
+			/*probability := float64(0.0)
+			vc := verifiersConfig[name]
+			if vc != nil {
+				probability = vc.Probability
+			}
+
+			es := common.VerifyEndpoints{}
+
+			for _, e := range old.Endpoints {
+
+				if e == nil {
+					continue
+				}
+
+				countries := make(common.VerifyCountries)
+				for k, s := range e.Countries {
+
+					p := s.Probability
+					if *p < probability {
+						continue
+					}
+					countries[k] = s
+				}
+
+				if len(countries) == 0 {
+					continue
+				}
+				es = append(es, &common.VerifyEndpoint{
+					URI:             e.URI,
+					Countries:       countries,
+					ObserveEndpoint: e.ObserveEndpoint,
+				})
+			}
+
+			if len(es) == 0 {
+				return nil
+			}
+
+			new := &common.NotifyResult{
+				Notifier:     old.Notifier,
+				VerifyResult: old.VerifyResult,
+			}
+			m.Store(nil, new)
+			*/
+			return nil
+		})
+	}
+
+	err := g.Wait()
+	if err != nil {
+		return nil, err
+	}
+
+	r := []*common.NotifyResult{}
+	m.Range(func(key, value any) bool {
+
+		e, ok := value.(*common.NotifyResult)
 		if !ok {
 			return false
 		}
@@ -316,8 +412,7 @@ func (a *Availability) Detect() error {
 		if sr == nil {
 			continue
 		}
-
-		a.logger.Debug("Availability detector source %s found %d endpoints", sr.Source.Name(), len(sr.Endpoints))
+		//a.logger.Debug("Availability detector source %s found %d endpoints", sr.Source.Name(), len(sr.Endpoints))
 
 		or, err := a.observe(sr)
 		if err != nil {
@@ -327,14 +422,15 @@ func (a *Availability) Detect() error {
 		ors = append(ors, or...)
 	}
 
+	// merge is needed here
+
 	vrs := []*common.VerifyResult{}
 	for _, or := range ors {
 
 		if or == nil {
 			continue
 		}
-
-		a.logger.Debug("Availability detector observer %s found %d endpoints", or.Observer.Name(), len(or.Endpoints))
+		//a.logger.Debug("Availability detector observer %s found %d endpoints", or.Observer.Name(), len(or.Endpoints))
 
 		vr, err := a.verify(or)
 		if err != nil {
@@ -344,7 +440,22 @@ func (a *Availability) Detect() error {
 		vrs = append(vrs, vr...)
 	}
 
-	a.logger.Debug("Availability detector verifiers %v", vrs)
+	// merge is needed here
+
+	for _, vr := range vrs {
+
+		if vr == nil {
+			continue
+		}
+
+		_, err := a.notify(vr)
+		if err != nil {
+			a.logger.Error("Availability detector notify error: %s", err)
+			continue
+		}
+	}
+
+	//a.logger.Debug("Availability detector verifiers %v", vrs)
 
 	return nil
 }

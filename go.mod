@@ -11,7 +11,7 @@ replace github.com/devopsext/tools => ../tools/
 require (
 	github.com/DataDog/datadog-api-client-go/v2 v2.29.0
 	github.com/devopsext/sre v0.5.1
-	github.com/devopsext/tools v0.15.3
+	github.com/devopsext/tools v0.15.4
 	github.com/devopsext/utils v0.4.3
 	github.com/go-co-op/gocron v1.37.0
 	github.com/jinzhu/copier v0.4.0
