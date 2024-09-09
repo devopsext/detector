@@ -16,3 +16,5 @@ config.yml
 query.data
 datadog.json
 logreport.json
+slack-message.tpl
+slack-runbooks.tpl
