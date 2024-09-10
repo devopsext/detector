@@ -22,12 +22,12 @@ type Detectors struct {
 	items     []Detector
 }
 
-func (ds *Detectors) Add(d Detector) {
+func (ds *Detectors) Add(d ...Detector) {
 
 	if utils.IsEmpty(d) {
 		return
 	}
-	ds.items = append(ds.items, d)
+	ds.items = append(ds.items, d...)
 }
 
 func (ds *Detectors) Scheduled() bool {

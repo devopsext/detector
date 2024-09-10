@@ -67,9 +67,21 @@ func (vs *Verifiers) Items() []Verifier {
 	return vs.items
 }
 
-func (vs *Verifiers) FindConfigurationByPattern(pattern string) map[string]*VerifierConfiguration {
+func (vs *Verifiers) GetDefaultConfigurations() []*VerifierConfiguration {
 
-	r := make(map[string]*VerifierConfiguration)
+	r := []*VerifierConfiguration{}
+
+	for _, v := range vs.items {
+		r = append(r, &VerifierConfiguration{
+			Verifier: v,
+		})
+	}
+	return r
+}
+
+func (vs *Verifiers) FindConfigurationByPattern(pattern string) []*VerifierConfiguration {
+
+	r := []*VerifierConfiguration{}
 
 	if len(vs.items) == 0 {
 		return r
@@ -102,10 +114,10 @@ func (vs *Verifiers) FindConfigurationByPattern(pattern string) map[string]*Veri
 			continue
 		}
 
-		r[name] = &VerifierConfiguration{
+		r = append(r, &VerifierConfiguration{
 			Verifier:    v,
 			Probability: f,
-		}
+		})
 	}
 	return r
 }

@@ -50,9 +50,9 @@ func (ss *Sources) Items() []Source {
 	return ss.items
 }
 
-func (ss *Sources) FindByPattern(pattern string) map[string]Source {
+func (ss *Sources) FindByPattern(pattern string) []Source {
 
-	r := make(map[string]Source)
+	r := []Source{}
 
 	if len(ss.items) == 0 {
 		return r
@@ -74,7 +74,7 @@ func (ss *Sources) FindByPattern(pattern string) map[string]Source {
 		if !utils.Contains(keys, name) {
 			continue
 		}
-		r[name] = s
+		r = append(r, s)
 	}
 	return r
 }

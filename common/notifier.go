@@ -43,9 +43,21 @@ func (ns *Notifiers) Items() []Notifier {
 	return ns.items
 }
 
-func (ns *Notifiers) FindConfigurationByPattern(pattern string) map[string]*NotifierConfiguration {
+func (ns *Notifiers) GetDefaultConfigurations() []*NotifierConfiguration {
 
-	r := make(map[string]*NotifierConfiguration)
+	r := []*NotifierConfiguration{}
+
+	for _, n := range ns.items {
+		r = append(r, &NotifierConfiguration{
+			Notifier: n,
+		})
+	}
+	return r
+}
+
+func (ns *Notifiers) FindConfigurationByPattern(pattern string) []*NotifierConfiguration {
+
+	r := []*NotifierConfiguration{}
 
 	if len(ns.items) == 0 {
 		return r
@@ -78,10 +90,10 @@ func (ns *Notifiers) FindConfigurationByPattern(pattern string) map[string]*Noti
 			continue
 		}
 
-		r[name] = &NotifierConfiguration{
+		r = append(r, &NotifierConfiguration{
 			Notifier:    v,
 			Probability: f,
-		}
+		})
 	}
 	return r
 }

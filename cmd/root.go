@@ -113,12 +113,20 @@ var notifierSlack = notifier.SlackOptions{
 	Runbooks: envFileContentExpand("NOTIFIER_SLACK_RUNBOOKS", ""),
 }
 
-var detectorAvailability = detector.AvailabilityOptions{
-	Schedule:  envGet("AVAILABILITY_SCHEDULE", "").(string),
-	Sources:   envGet("AVAILABILITY_SOURCES", "").(string),
-	Observers: envGet("AVAILABILITY_OBSERVERS", "").(string),
-	Verifiers: envGet("AVAILABILITY_VERIFIERS", "").(string),
-	Notifiers: envGet("AVAILABILITY_NOTIFIERS", "").(string),
+type DetectorSimpleOptions struct {
+	Schedules string
+	Sources   string
+	Observers string
+	Verifiers string
+	Notifiers string
+}
+
+var detectorSimple = DetectorSimpleOptions{
+	Schedules: envGet("SIMPLE_SCHEDULES", "").(string),
+	Sources:   envGet("SIMPLE_SOURCES", "").(string),
+	Observers: envGet("SIMPLE_OBSERVERS", "").(string),
+	Verifiers: envGet("SIMPLE_VERIFIERS", "").(string),
+	Notifiers: envGet("SIMPLE_NOTIFIERS", "").(string),
 }
 
 /*var dSignalOptions = discovery.SignalOptions{
@@ -160,6 +168,86 @@ func envFileContentExpand(s string, def string) string {
 		return def
 	}
 	return os.Expand(string(bytes), getOnlyEnv)
+}
+
+func getSimpleDetectors(obs *common.Observability, allSources *common.Sources, allObservers *common.Observers,
+	allVerifiers *common.Verifiers, allNotifiers *common.Notifiers) []common.Detector {
+
+	r := []common.Detector{}
+
+	sourceKVs := utils.MapGetKeyValues(detectorSimple.Sources)
+
+	for k, v := range sourceKVs {
+
+		if utils.IsEmpty(k) || utils.IsEmpty(v) {
+			continue
+		}
+
+		// set schedule
+		schedule := "30s"
+		scheduleKVs := utils.MapGetKeyValues(detectorSimple.Schedules)
+		if !utils.IsEmpty(scheduleKVs[k]) {
+			schedule = scheduleKVs[k]
+		}
+
+		// find sources
+		sm := allSources.FindByPattern(v)
+		if len(sm) == 0 {
+			sm = allSources.Items()
+		}
+
+		// set observer configurations
+		observerCfg := ""
+		observerKVs := utils.MapGetKeyValues(detectorSimple.Observers)
+		if !utils.IsEmpty(observerKVs[k]) {
+			observerCfg = observerKVs[k]
+		}
+
+		oc := allObservers.FindConfigurationByPattern(observerCfg)
+		if len(oc) == 0 {
+			oc = allObservers.GetDefaultConfigurations()
+		}
+
+		// set verifier configurations
+		verifierCfg := ""
+		verifierKVs := utils.MapGetKeyValues(detectorSimple.Verifiers)
+		if !utils.IsEmpty(verifierKVs[k]) {
+			verifierCfg = verifierKVs[k]
+		}
+
+		vc := allVerifiers.FindConfigurationByPattern(verifierCfg)
+		if len(vc) == 0 {
+			vc = allVerifiers.GetDefaultConfigurations()
+		}
+
+		// set notifier configurations
+		notifierCfg := ""
+		notifierKVs := utils.MapGetKeyValues(detectorSimple.Notifiers)
+		if !utils.IsEmpty(notifierKVs[k]) {
+			notifierCfg = notifierKVs[k]
+		}
+
+		nc := allNotifiers.FindConfigurationByPattern(notifierCfg)
+		if len(nc) == 0 {
+			nc = allNotifiers.GetDefaultConfigurations()
+		}
+
+		opts := detector.SimpleOptions{
+			Schedule:               schedule,
+			Sources:                sm,
+			ObserverConfigurations: oc,
+			VerifierConfigurations: vc,
+			NotifierConfigurations: nc,
+		}
+
+		d := detector.NewSimple(&opts, obs)
+		if utils.IsEmpty(d) {
+			continue
+		}
+		r = append(r, d)
+	}
+
+	return r
 }
 
 func interceptSyscall() {
@@ -215,7 +303,7 @@ func Execute() {
 			notifiers.Add(notifier.NewSlack(notifierSlack, obs))
 
 			detectors := common.NewDetectors(obs)
-			detectors.Add(detector.NewAvailability(&detectorAvailability, obs, sources, observers, verifiers, notifiers))
+			detectors.Add(getSimpleDetectors(obs, sources, observers, verifiers, notifiers)...)
 
 			detectors.Start(rootOptions.RunOnce, rootOptions.SchedulerWait)
 
@@ -284,11 +372,11 @@ func Execute() {
 	flags.StringVar(&notifierSlack.Message, "notifier-slack-message", notifierSlack.Message, "Notifier slack message")
 	flags.StringVar(&notifierSlack.Runbooks, "notifier-slack-runbooks", notifierSlack.Runbooks, "Notifier slack runbooks")
 
-	flags.StringVar(&detectorAvailability.Schedule, "detector-availability-schedule", detectorAvailability.Schedule, "Detector availability schedule")
-	flags.StringVar(&detectorAvailability.Sources, "detector-availability-sources", detectorAvailability.Sources, "Detector availability sources")
-	flags.StringVar(&detectorAvailability.Observers, "detector-availability-observers", detectorAvailability.Observers, "Detector availability observers")
-	flags.StringVar(&detectorAvailability.Verifiers, "detector-availability-verifiers", detectorAvailability.Verifiers, "Detector availability verifiers")
-	flags.StringVar(&detectorAvailability.Notifiers, "detector-availability-notifiers", detectorAvailability.Notifiers, "Detector availability notifiers")
+	flags.StringVar(&detectorSimple.Schedules, "detector-simple-schedules", detectorSimple.Schedules, "Detector simple schedules")
+	flags.StringVar(&detectorSimple.Sources, "detector-simple-sources", detectorSimple.Sources, "Detector simple sources")
+	flags.StringVar(&detectorSimple.Observers, "detector-simple-observers", detectorSimple.Observers, "Detector simple observers")
+	flags.StringVar(&detectorSimple.Verifiers, "detector-simple-verifiers", detectorSimple.Verifiers, "Detector simple verifiers")
+	flags.StringVar(&detectorSimple.Notifiers, "detector-simple-notifiers", detectorSimple.Notifiers, "Detector simple notifiers")
 
 	// Signal
 	/*

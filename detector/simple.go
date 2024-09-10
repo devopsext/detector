@@ -2,10 +2,7 @@ package detector
 
 import (
 	"errors"
-	"slices"
 	"sync"
-
-	"maps"
 
 	"github.com/devopsext/detector/common"
 	sreCommon "github.com/devopsext/sre/common"
@@ -13,58 +10,43 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-type AvailabilityOptions struct {
-	Schedule  string
-	Sources   string
-	Observers string
-	Verifiers string
-	Notifiers string
+type SimpleOptions struct {
+	Schedule               string
+	Sources                []common.Source
+	ObserverConfigurations []*common.ObserverConfiguration
+	VerifierConfigurations []*common.VerifierConfiguration
+	NotifierConfigurations []*common.NotifierConfiguration
 }
 
-type Availability struct {
-	options   *AvailabilityOptions
-	logger    sreCommon.Logger
-	sources   *common.Sources
-	observers *common.Observers
-	verifiers *common.Verifiers
-	notifiers *common.Notifiers
-	lock      *sync.Mutex
+type Simple struct {
+	options *SimpleOptions
+	logger  sreCommon.Logger
+	lock    *sync.Mutex
 }
 
-const AvailabilityDetectorName = "Availability"
+const SimpleDetectorName = "Simple"
 
-// Availability
+// Simple
 
-func (a *Availability) Name() string {
-	return AvailabilityDetectorName
+func (a *Simple) Name() string {
+	return SimpleDetectorName
 }
 
-func (a *Availability) Schedule() string {
+func (a *Simple) Schedule() string {
 	return a.options.Schedule
 }
 
-func (a *Availability) load() ([]*common.SourceResult, error) {
+func (a *Simple) load() ([]*common.SourceResult, error) {
 
-	items := a.sources.Items()
+	items := a.options.Sources
 	if len(items) == 0 {
-		return nil, errors.New("Availability detector cannot find sources")
+		return nil, errors.New("Simple detector cannot find sources")
 	}
-
-	sources := a.sources.FindByPattern(a.options.Sources)
-	if len(sources) == 0 {
-		return nil, errors.New("Availability detector has no sources")
-	}
-	keys := slices.Collect(maps.Keys(sources))
 
 	g := &errgroup.Group{}
 	m := &sync.Map{}
 
 	for _, s := range items {
-
-		name := s.Name()
-		if !utils.Contains(keys, name) {
-			continue
-		}
 
 		g.Go(func() error {
 
@@ -106,41 +88,26 @@ func (a *Availability) load() ([]*common.SourceResult, error) {
 	return r, nil
 }
 
-func (a *Availability) observe(sr *common.SourceResult) ([]*common.ObserveResult, error) {
+func (a *Simple) observe(sr *common.SourceResult) ([]*common.ObserveResult, error) {
 
-	items := a.observers.Items()
+	items := a.options.ObserverConfigurations
 	if len(items) == 0 {
-		return nil, errors.New("Availability detector cannot find observers")
+		return nil, errors.New("Simple detector cannot find observer configurations")
 	}
-
-	observersConfig := a.observers.FindConfigurationByPattern(a.options.Observers)
-	if len(observersConfig) == 0 {
-		return nil, errors.New("Availability detector has no observers configurations")
-	}
-	keys := slices.Collect(maps.Keys(observersConfig))
 
 	g := &errgroup.Group{}
 	m := &sync.Map{}
 
-	for _, o := range items {
-
-		name := o.Name()
-		if !utils.Contains(keys, name) {
-			continue
-		}
+	for _, oc := range items {
 
 		g.Go(func() error {
 
-			old, err := o.Observe(sr)
+			old, err := oc.Observer.Observe(sr)
 			if err != nil {
 				return err
 			}
 
-			probability := float64(0.0)
-			oc := observersConfig[name]
-			if oc != nil {
-				probability = oc.Probability
-			}
+			probability := oc.Probability
 
 			es := common.ObserveEndpoints{}
 
@@ -201,41 +168,26 @@ func (a *Availability) observe(sr *common.SourceResult) ([]*common.ObserveResult
 	return r, nil
 }
 
-func (a *Availability) verify(or *common.ObserveResult) ([]*common.VerifyResult, error) {
+func (a *Simple) verify(or *common.ObserveResult) ([]*common.VerifyResult, error) {
 
-	items := a.verifiers.Items()
+	items := a.options.VerifierConfigurations
 	if len(items) == 0 {
-		return nil, errors.New("Availability detector cannot find verifiers")
+		return nil, errors.New("Simple detector cannot find verifier configurations")
 	}
-
-	verifiersConfig := a.verifiers.FindConfigurationByPattern(a.options.Verifiers)
-	if len(verifiersConfig) == 0 {
-		return nil, errors.New("Availability detector has no verifiers configurations")
-	}
-	keys := slices.Collect(maps.Keys(verifiersConfig))
 
 	g := &errgroup.Group{}
 	m := &sync.Map{}
 
-	for _, v := range items {
-
-		name := v.Name()
-		if !utils.Contains(keys, name) {
-			continue
-		}
+	for _, vc := range items {
 
 		g.Go(func() error {
 
-			old, err := v.Verify(or)
+			old, err := vc.Verifier.Verify(or)
 			if err != nil {
 				return err
 			}
 
-			probability := float64(0.0)
-			vc := verifiersConfig[name]
-			if vc != nil {
-				probability = vc.Probability
-			}
+			probability := vc.Probability
 
 			es := common.VerifyEndpoints{}
 
@@ -297,32 +249,21 @@ func (a *Availability) verify(or *common.ObserveResult) ([]*common.VerifyResult,
 	return r, nil
 }
 
-func (a *Availability) notify(vr *common.VerifyResult) ([]*common.NotifyResult, error) {
+func (a *Simple) notify(vr *common.VerifyResult) ([]*common.NotifyResult, error) {
 
-	items := a.notifiers.Items()
+	items := a.options.NotifierConfigurations
 	if len(items) == 0 {
-		return nil, errors.New("Availability detector cannot find notifiers")
+		return nil, errors.New("Simple detector cannot find notifier configurations")
 	}
-
-	notifiersConfig := a.notifiers.FindConfigurationByPattern(a.options.Notifiers)
-	if len(notifiersConfig) == 0 {
-		return nil, errors.New("Availability detector has no notifiers configurations")
-	}
-	keys := slices.Collect(maps.Keys(notifiersConfig))
 
 	g := &errgroup.Group{}
 	m := &sync.Map{}
 
-	for _, n := range items {
-
-		name := n.Name()
-		if !utils.Contains(keys, name) {
-			continue
-		}
+	for _, nc := range items {
 
 		g.Go(func() error {
 
-			_, err := n.Notify(vr)
+			_, err := nc.Notifier.Notify(vr)
 			if err != nil {
 				return err
 			}
@@ -393,16 +334,16 @@ func (a *Availability) notify(vr *common.VerifyResult) ([]*common.NotifyResult, 
 	return r, nil
 }
 
-func (a *Availability) Detect() error {
+func (a *Simple) Detect() error {
 
 	if !a.lock.TryLock() {
-		return errors.New("Availability detector already in a loop")
+		return errors.New("Simple detector already in a loop")
 	}
 	defer a.lock.Unlock()
 
 	srs, err := a.load()
 	if err != nil {
-		a.logger.Debug("Availability detector cannot load from sources, error: %s", err)
+		a.logger.Debug("Simple detector cannot load from sources, error: %s", err)
 		return err
 	}
 
@@ -412,11 +353,11 @@ func (a *Availability) Detect() error {
 		if sr == nil {
 			continue
 		}
-		//a.logger.Debug("Availability detector source %s found %d endpoints", sr.Source.Name(), len(sr.Endpoints))
+		//a.logger.Debug("Simple detector source %s found %d endpoints", sr.Source.Name(), len(sr.Endpoints))
 
 		or, err := a.observe(sr)
 		if err != nil {
-			a.logger.Error("Availability detector observe error: %s", err)
+			a.logger.Error("Simple detector observe error: %s", err)
 			continue
 		}
 		ors = append(ors, or...)
@@ -430,11 +371,11 @@ func (a *Availability) Detect() error {
 		if or == nil {
 			continue
 		}
-		//a.logger.Debug("Availability detector observer %s found %d endpoints", or.Observer.Name(), len(or.Endpoints))
+		//a.logger.Debug("Simple detector observer %s found %d endpoints", or.Observer.Name(), len(or.Endpoints))
 
 		vr, err := a.verify(or)
 		if err != nil {
-			a.logger.Error("Availability detector verify error: %s", err)
+			a.logger.Error("Simple detector verify error: %s", err)
 			continue
 		}
 		vrs = append(vrs, vr...)
@@ -450,48 +391,28 @@ func (a *Availability) Detect() error {
 
 		_, err := a.notify(vr)
 		if err != nil {
-			a.logger.Error("Availability detector notify error: %s", err)
+			a.logger.Error("Simple detector notify error: %s", err)
 			continue
 		}
 	}
 
-	//a.logger.Debug("Availability detector verifiers %v", vrs)
+	//a.logger.Debug("Simple detector verifiers %v", vrs)
 
 	return nil
 }
 
-func NewAvailability(options *AvailabilityOptions, observability *common.Observability,
-	sources *common.Sources, observers *common.Observers, verifiers *common.Verifiers, notifiers *common.Notifiers) *Availability {
+func NewSimple(options *SimpleOptions, observability *common.Observability) *Simple {
 
 	logger := observability.Logs()
 
 	if utils.IsEmpty(options.Sources) {
-		logger.Debug("Availability detector has no sources. Skipped")
+		logger.Debug("Simple detector has no sources. Skipped")
 		return nil
 	}
 
-	if utils.IsEmpty(options.Observers) {
-		logger.Debug("Availability detector has no observers. Skipped")
-		return nil
-	}
-
-	if utils.IsEmpty(options.Verifiers) {
-		logger.Debug("Availability detector has no verifiers. Skipped")
-		return nil
-	}
-
-	if utils.IsEmpty(options.Notifiers) {
-		logger.Debug("Availability detector has no notifiers. Skipped")
-		return nil
-	}
-
-	return &Availability{
-		options:   options,
-		logger:    logger,
-		sources:   sources,
-		observers: observers,
-		verifiers: verifiers,
-		notifiers: notifiers,
-		lock:      &sync.Mutex{},
+	return &Simple{
+		options: options,
+		logger:  logger,
+		lock:    &sync.Mutex{},
 	}
 }

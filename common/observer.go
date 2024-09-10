@@ -53,9 +53,21 @@ func (ob *Observers) Items() []Observer {
 	return ob.items
 }
 
-func (ob *Observers) FindConfigurationByPattern(pattern string) map[string]*ObserverConfiguration {
+func (ob *Observers) GetDefaultConfigurations() []*ObserverConfiguration {
 
-	r := make(map[string]*ObserverConfiguration)
+	r := []*ObserverConfiguration{}
+
+	for _, o := range ob.items {
+		r = append(r, &ObserverConfiguration{
+			Observer: o,
+		})
+	}
+	return r
+}
+
+func (ob *Observers) FindConfigurationByPattern(pattern string) []*ObserverConfiguration {
+
+	r := []*ObserverConfiguration{}
 
 	if len(ob.items) == 0 {
 		return r
@@ -88,10 +100,10 @@ func (ob *Observers) FindConfigurationByPattern(pattern string) map[string]*Obse
 			continue
 		}
 
-		r[name] = &ObserverConfiguration{
+		r = append(r, &ObserverConfiguration{
 			Observer:    o,
 			Probability: f,
-		}
+		})
 	}
 	return r
 }
