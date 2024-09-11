@@ -67,7 +67,7 @@ func (ns *Notifiers) FindConfigurationByPattern(pattern string) []*NotifierConfi
 		return r
 	}
 
-	m := utils.MapGetKeyValues(pattern)
+	m := utils.MapGetKeyValuesEx(pattern, ";", ":")
 	if len(m) == 0 {
 		return r
 	}

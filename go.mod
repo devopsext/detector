@@ -12,7 +12,7 @@ require (
 	github.com/DataDog/datadog-api-client-go/v2 v2.29.0
 	github.com/devopsext/sre v0.5.1
 	github.com/devopsext/tools v0.15.7
-	github.com/devopsext/utils v0.4.3
+	github.com/devopsext/utils v0.4.5
 	github.com/go-co-op/gocron v1.37.0
 	github.com/jinzhu/copier v0.4.0
 	github.com/spf13/cobra v1.8.1

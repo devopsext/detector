@@ -77,7 +77,7 @@ func (ob *Observers) FindConfigurationByPattern(pattern string) []*ObserverConfi
 		return r
 	}
 
-	m := utils.MapGetKeyValues(pattern)
+	m := utils.MapGetKeyValuesEx(pattern, ";", ":")
 	if len(m) == 0 {
 		return r
 	}

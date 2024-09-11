@@ -91,7 +91,7 @@ func (vs *Verifiers) FindConfigurationByPattern(pattern string) []*VerifierConfi
 		return r
 	}
 
-	m := utils.MapGetKeyValues(pattern)
+	m := utils.MapGetKeyValuesEx(pattern, ";", ":")
 	if len(m) == 0 {
 		return r
 	}

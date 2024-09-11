@@ -191,7 +191,20 @@ func getSimpleDetectors(obs *common.Observability, allSources *common.Sources, a
 		}
 
 		// find sources
-		sm := allSources.FindByPattern(v)
+		// "Detector=Config;PubSub,="
+		sm := []common.Source{}
+		vKeys := strings.Split(v, ";")
+
+		for _, vk := range vKeys {
+			vk = strings.TrimSpace(vk)
+			if utils.IsEmpty(vk) {
+				continue
+			}
+			s := allSources.FindByName(vk)
+			if !utils.IsEmpty(s) {
+				sm = append(sm, s)
+			}
+		}
 		if len(sm) == 0 {
 			sm = allSources.Items()
 		}
@@ -203,6 +216,7 @@ func getSimpleDetectors(obs *common.Observability, allSources *common.Sources, a
 			observerCfg = observerKVs[k]
 		}
 
+		// Detector1=Datadog:0.0;Observer:1.0
 		oc := allObservers.FindConfigurationByPattern(observerCfg)
 		if len(oc) == 0 {
 			oc = allObservers.GetDefaultConfigurations()
@@ -215,6 +229,7 @@ func getSimpleDetectors(obs *common.Observability, allSources *common.Sources, a
 			verifierCfg = verifierKVs[k]
 		}
 
+		// Detector=Site24x7:0.0
 		vc := allVerifiers.FindConfigurationByPattern(verifierCfg)
 		if len(vc) == 0 {
 			vc = allVerifiers.GetDefaultConfigurations()
@@ -227,6 +242,7 @@ func getSimpleDetectors(obs *common.Observability, allSources *common.Sources, a
 			notifierCfg = notifierKVs[k]
 		}
 
+		// Detector=Slack:0.0
 		nc := allNotifiers.FindConfigurationByPattern(notifierCfg)
 		if len(nc) == 0 {
 			nc = allNotifiers.GetDefaultConfigurations()

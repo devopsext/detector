@@ -1,9 +1,6 @@
 package common
 
 import (
-	"maps"
-	"slices"
-
 	sreCommon "github.com/devopsext/sre/common"
 	"github.com/devopsext/utils"
 )
@@ -18,6 +15,7 @@ type SourceEndpoint struct {
 	Disabled  bool                    `json:"disabled"`
 	Countries []string                `json:"countries,omitempty"`
 	IPs       []string                `json:"ips,omitempty"`
+	Detectors []string                `json:"detectors,omitempty"`
 	Response  *SourceEndpointResponse `json:"response,omitempty"`
 }
 
@@ -50,33 +48,15 @@ func (ss *Sources) Items() []Source {
 	return ss.items
 }
 
-func (ss *Sources) FindByPattern(pattern string) []Source {
-
-	r := []Source{}
-
-	if len(ss.items) == 0 {
-		return r
-	}
-
-	if utils.IsEmpty(pattern) {
-		return r
-	}
-
-	m := utils.MapGetKeyValues(pattern)
-	if len(m) == 0 {
-		return r
-	}
-	keys := slices.Collect(maps.Keys(m))
+func (ss *Sources) FindByName(name string) Source {
 
 	for _, s := range ss.items {
 
-		name := s.Name()
-		if !utils.Contains(keys, name) {
-			continue
+		if s.Name() == name {
+			return s
 		}
-		r = append(r, s)
 	}
-	return r
+	return nil
 }
 
 func NewSources(observability *Observability) *Sources {
