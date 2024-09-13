@@ -12,7 +12,7 @@ import (
 )
 
 type ConfigFile struct {
-	Endpoints common.SourceEndpoints
+	Endpoints []*common.SourceEndpoint
 }
 
 type ConfigOptions struct {
@@ -70,9 +70,11 @@ func (cs *Config) Load() (*common.SourceResult, error) {
 		return nil, fmt.Errorf("Config cannot read from file %s, error: %s", cs.options.Path, err)
 	}
 
+	e := common.SourceEndpoints{}
+	e.Add(config.Endpoints...)
+
 	r := &common.SourceResult{
-		Source:    cs,
-		Endpoints: config.Endpoints,
+		Endpoints: e,
 	}
 
 	return r, nil

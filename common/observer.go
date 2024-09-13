@@ -13,17 +13,18 @@ type ObserveProbability = float64
 type ObserveCountries = map[string]*ObserveProbability
 
 type ObserveEndpoint struct {
-	URI            string
-	Countries      ObserveCountries
-	SourceEndpoint *SourceEndpoint
+	URI       string
+	Countries ObserveCountries
+	IPs       []string
+	Response  *SourceEndpointResponse
 }
 
-type ObserveEndpoints = []*ObserveEndpoint
+type ObserveEndpoints struct {
+	items []*ObserveEndpoint
+}
 
 type ObserveResult struct {
-	Observer     Observer
-	SourceResult *SourceResult
-	Endpoints    ObserveEndpoints
+	Endpoints ObserveEndpoints
 }
 
 type ObserverConfiguration struct {
@@ -40,6 +41,86 @@ type Observers struct {
 	logger sreCommon.Logger
 	items  []Observer
 }
+
+// ObserveEndpoints
+
+func (oes *ObserveEndpoints) Clone(oe *ObserveEndpoint) *ObserveEndpoint {
+
+	oc := make(ObserveCountries)
+	for k, v := range oe.Countries {
+
+		var p ObserveProbability
+		if v != nil {
+			p = *v
+		}
+		oc[k] = &p
+	}
+
+	new := &ObserveEndpoint{
+		URI:       oe.URI,
+		Countries: oc,
+		IPs:       oe.IPs,
+		Response:  oe.Response,
+	}
+	return new
+}
+
+func (oes *ObserveEndpoints) Add(e ...*ObserveEndpoint) {
+	oes.items = append(oes.items, e...)
+}
+
+func (oes *ObserveEndpoints) Items() []*ObserveEndpoint {
+	return oes.items
+}
+
+func (oes *ObserveEndpoints) IsEmpty() bool {
+	return len(oes.items) == 0
+}
+
+func (oes *ObserveEndpoints) FindByURI(uri string) *ObserveEndpoints {
+
+	r := &ObserveEndpoints{}
+
+	nURI := NormalizeURI(uri)
+	if utils.IsEmpty(nURI) {
+		return r
+	}
+
+	for _, ep := range oes.items {
+
+		epURI := NormalizeURI(ep.URI)
+		if nURI == epURI {
+			r.Add(ep)
+		}
+	}
+	return r
+}
+
+func (oes *ObserveEndpoints) Merge(eps *ObserveEndpoints) {
+
+	if eps == nil {
+		return
+	}
+
+	for _, ep := range eps.items {
+
+		sameURIs := oes.FindByURI(ep.URI)
+		if sameURIs.IsEmpty() {
+			new := oes.Clone(ep)
+			oes.Add(new)
+			continue
+		}
+
+		// to do
+		/*
+			for _, _ := range sameURIs.items {
+
+			}
+		*/
+	}
+}
+
+// Observers
 
 func (ob *Observers) Add(o Observer) {
 

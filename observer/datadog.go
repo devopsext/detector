@@ -330,7 +330,7 @@ func (d *Datadog) firstURIbyCountry(md DatadogMetricData, uri, country string) *
 func (d *Datadog) buildQuery(sr *common.SourceResult, query, tagUri string) string {
 
 	from := ""
-	for _, e := range sr.Endpoints {
+	for _, e := range sr.Endpoints.Items() {
 
 		filter := fmt.Sprintf("%s:%s", tagUri, e.URI)
 
@@ -346,7 +346,7 @@ func (d *Datadog) buildQuery(sr *common.SourceResult, query, tagUri string) stri
 
 func (d *Datadog) Observe(sr *common.SourceResult) (*common.ObserveResult, error) {
 
-	if len(sr.Endpoints) == 0 {
+	if sr.Endpoints.IsEmpty() {
 		return nil, errors.New("Datadog cannot process empty endpoints")
 	}
 
@@ -384,7 +384,7 @@ func (d *Datadog) Observe(sr *common.SourceResult) (*common.ObserveResult, error
 
 	es := common.ObserveEndpoints{}
 
-	for _, e := range sr.Endpoints {
+	for _, e := range sr.Endpoints.Items() {
 
 		uri := common.NormalizeURI(e.URI)
 
@@ -413,17 +413,16 @@ func (d *Datadog) Observe(sr *common.SourceResult) (*common.ObserveResult, error
 		}
 
 		e := &common.ObserveEndpoint{
-			URI:            uri,
-			Countries:      countries,
-			SourceEndpoint: e,
+			URI:       uri,
+			Countries: countries,
+			IPs:       e.IPs,
+			Response:  e.Response,
 		}
-		es = append(es, e)
+		es.Add(e)
 	}
 
 	r := &common.ObserveResult{
-		Observer:     d,
-		SourceResult: sr,
-		Endpoints:    es,
+		Endpoints: es,
 	}
 	return r, nil
 }

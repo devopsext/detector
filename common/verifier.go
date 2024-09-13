@@ -27,17 +27,16 @@ type VerifyStatus struct {
 type VerifyCountries = map[string]*VerifyStatus
 
 type VerifyEndpoint struct {
-	URI             string
-	Countries       VerifyCountries
-	ObserveEndpoint *ObserveEndpoint
+	URI       string
+	Countries VerifyCountries
 }
 
-type VerifyEndpoints = []*VerifyEndpoint
+type VerifyEndpoints struct {
+	items []*VerifyEndpoint
+}
 
 type VerifyResult struct {
-	Verifier      Verifier
-	ObserveResult *ObserveResult
-	Endpoints     VerifyEndpoints
+	Endpoints VerifyEndpoints
 }
 
 type Verifier interface {
@@ -54,6 +53,83 @@ type Verifiers struct {
 	logger sreCommon.Logger
 	items  []Verifier
 }
+
+// VerifyEndpoints
+
+func (ves *VerifyEndpoints) Clone(ve *VerifyEndpoint) *VerifyEndpoint {
+
+	vc := make(VerifyCountries)
+	for k, v := range ve.Countries {
+
+		vc[k] = &VerifyStatus{
+			Probability: v.Probability,
+			Flags:       v.Flags,
+		}
+	}
+
+	new := &VerifyEndpoint{
+		URI:       ve.URI,
+		Countries: vc,
+	}
+	return new
+}
+
+func (ves *VerifyEndpoints) Add(e ...*VerifyEndpoint) {
+	ves.items = append(ves.items, e...)
+}
+
+func (ves *VerifyEndpoints) Items() []*VerifyEndpoint {
+	return ves.items
+}
+
+func (ves *VerifyEndpoints) IsEmpty() bool {
+	return len(ves.items) == 0
+}
+
+func (ves *VerifyEndpoints) FindByURI(uri string) *VerifyEndpoints {
+
+	r := &VerifyEndpoints{}
+
+	nURI := NormalizeURI(uri)
+	if utils.IsEmpty(nURI) {
+		return r
+	}
+
+	for _, ep := range ves.items {
+
+		epURI := NormalizeURI(ep.URI)
+		if nURI == epURI {
+			r.Add(ep)
+		}
+	}
+	return r
+}
+
+func (ves *VerifyEndpoints) Merge(eps *VerifyEndpoints) {
+
+	if eps == nil {
+		return
+	}
+
+	for _, ep := range eps.items {
+
+		sameURIs := ves.FindByURI(ep.URI)
+		if sameURIs.IsEmpty() {
+			new := ves.Clone(ep)
+			ves.Add(new)
+			continue
+		}
+
+		// to do
+		/*
+			for _, _ := range sameURIs.items {
+
+			}
+		*/
+	}
+}
+
+// Verifiers
 
 func (vs *Verifiers) Add(v Verifier) {
 

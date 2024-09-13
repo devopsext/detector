@@ -371,7 +371,7 @@ func (s *Site24x7) getLogReportSummary(oe *common.ObserveEndpoint, locations *ve
 		flags        common.VerifyStatusFlags
 	}
 
-	response := oe.SourceEndpoint.Response
+	response := oe.Response
 
 	var reCode *regexp.Regexp
 	if response != nil && !utils.IsEmpty(response.Code) {
@@ -379,7 +379,7 @@ func (s *Site24x7) getLogReportSummary(oe *common.ObserveEndpoint, locations *ve
 	}
 
 	reIPs := make(map[string]*regexp.Regexp)
-	for _, ip := range oe.SourceEndpoint.IPs {
+	for _, ip := range oe.IPs {
 		reIP, _ := regexp.Compile(ip)
 		if reIP == nil {
 			continue
@@ -413,7 +413,7 @@ func (s *Site24x7) getLogReportSummary(oe *common.ObserveEndpoint, locations *ve
 
 		flags := make(common.VerifyStatusFlags)
 
-		if len(oe.SourceEndpoint.IPs) > 0 {
+		if len(oe.IPs) > 0 {
 			exists := false
 			for _, v := range reIPs {
 				if v.MatchString(dr.ResolvedIP) {
@@ -465,7 +465,7 @@ func (s *Site24x7) getLogReportSummary(oe *common.ObserveEndpoint, locations *ve
 
 func (s *Site24x7) Verify(or *common.ObserveResult) (*common.VerifyResult, error) {
 
-	if len(or.Endpoints) == 0 {
+	if or.Endpoints.IsEmpty() {
 		return nil, errors.New("Site24x7 cannot process empty endpoints")
 	}
 
@@ -482,7 +482,7 @@ func (s *Site24x7) Verify(or *common.ObserveResult) (*common.VerifyResult, error
 	g := &errgroup.Group{}
 	m := &sync.Map{}
 
-	for _, oe := range or.Endpoints {
+	for _, oe := range or.Endpoints.Items() {
 
 		g.Go(func() error {
 
@@ -519,9 +519,8 @@ func (s *Site24x7) Verify(or *common.ObserveResult) (*common.VerifyResult, error
 			}
 
 			ve := &common.VerifyEndpoint{
-				URI:             uri,
-				Countries:       common.VerifyCountries{},
-				ObserveEndpoint: oe,
+				URI:       uri,
+				Countries: common.VerifyCountries{},
 			}
 
 			rs := s.getLogReportSummary(oe, locations, rd.Report, vendors.Site24x7DataCollectionTypePollNow)
@@ -551,14 +550,12 @@ func (s *Site24x7) Verify(or *common.ObserveResult) (*common.VerifyResult, error
 		if !ok {
 			return false
 		}
-		vs = append(vs, e)
+		vs.Add(e)
 		return true
 	})
 
 	r := &common.VerifyResult{
-		Verifier:      s,
-		ObserveResult: or,
-		Endpoints:     vs,
+		Endpoints: vs,
 	}
 	return r, nil
 }

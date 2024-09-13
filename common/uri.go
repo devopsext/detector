@@ -98,6 +98,19 @@ func NormalizeCountry(s string) string {
 	return strings.ToUpper(s)
 }
 
+func NormalizeCountries(countries []string) []string {
+
+	nCountries := []string{}
+	for _, c := range countries {
+
+		c = NormalizeCountry(c)
+		if !utils.IsEmpty(c) && !utils.Contains(nCountries, c) {
+			nCountries = append(nCountries, c)
+		}
+	}
+	return nCountries
+}
+
 func NormalizeURI(s string) string {
 	return strings.ToLower(s)
 }
