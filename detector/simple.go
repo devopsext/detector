@@ -3,6 +3,7 @@ package detector
 import (
 	"errors"
 	"sync"
+	"time"
 
 	"github.com/devopsext/detector/common"
 	sreCommon "github.com/devopsext/sre/common"
@@ -405,44 +406,65 @@ func (a *Simple) Detect() error {
 	}
 	defer a.lock.Unlock()
 
+	a.logger.Debug("Simple detector is loading...")
+
+	t1 := time.Now()
+
 	srs, err := a.load()
 	if err != nil {
 		a.logger.Debug("Simple detector cannot load from sources, error: %s", err)
 		return err
 	}
+	a.logger.Debug("Simple detector sources were loaded in %s", time.Since(t1))
 
 	sr := a.mergeSourceResults(srs)
 	if sr == nil {
 		return nil
 	}
 
+	a.logger.Debug("Simple detector is observing...")
+
+	t2 := time.Now()
+
 	ors, err := a.observe(sr)
 	if err != nil {
 		a.logger.Error("Simple detector cannot observe, error: %s", err)
 		return err
 	}
+	a.logger.Debug("Simple detector observed in %s", time.Since(t2))
 
 	or := a.mergeObserveResults(ors)
 	if or == nil {
 		return nil
 	}
 
+	a.logger.Debug("Simple detector is verifying...")
+
+	t3 := time.Now()
+
 	vrs, err := a.verify(or)
 	if err != nil {
 		a.logger.Error("Simple detector cannot verify, error: %s", err)
 		return err
 	}
+	a.logger.Debug("Simple detector verified in %s", time.Since(t3))
 
 	vr := a.mergeVerifyResults(vrs)
 	if vr == nil {
 		return nil
 	}
 
+	a.logger.Debug("Simple detector is notifying...")
+
+	t4 := time.Now()
+
 	_, err = a.notify(vr)
 	if err != nil {
 		a.logger.Error("Simple detector cannot notify, error: %s", err)
 		return err
 	}
+	a.logger.Debug("Simple detector notified in %s", time.Since(t4))
+
 	return nil
 }
 

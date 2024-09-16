@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"time"
 
 	"github.com/devopsext/detector/common"
 	sreCommon "github.com/devopsext/sre/common"
@@ -65,10 +66,16 @@ func (cs *Config) loadYaml(file string) (*ConfigFile, error) {
 
 func (cs *Config) Load() (*common.SourceResult, error) {
 
+	cs.logger.Debug("Config is loading...")
+
+	t1 := time.Now()
+
 	config, err := cs.loadYaml(cs.options.Path)
 	if err != nil {
 		return nil, fmt.Errorf("Config cannot read from file %s, error: %s", cs.options.Path, err)
 	}
+
+	cs.logger.Debug("Config was loaded in %s", time.Since(t1))
 
 	e := common.SourceEndpoints{}
 	e.Add(config.Endpoints...)

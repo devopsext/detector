@@ -350,19 +350,28 @@ func (d *Datadog) Observe(sr *common.SourceResult) (*common.ObserveResult, error
 		return nil, errors.New("Datadog cannot process empty endpoints")
 	}
 
+	d.logger.Debug("Datadog is observing...")
+
 	var md DatadogMetricData
 
 	if utils.FileExists(d.options.File) {
+
+		d.logger.Debug("Datadog is loading data from %s", d.options.File)
+
+		t1 := time.Now()
 
 		mf, err := d.loadV1File(d.options.File)
 		if err != nil {
 			return nil, err
 		}
 		md = mf
+
+		d.logger.Debug("Datadog data was loaded in %s", time.Since(t1))
+
 	} else if !utils.IsEmpty(d.options.Query) {
 
 		query := d.buildQuery(sr, d.options.Query, d.options.TagUri)
-		d.logger.Debug("Datadog query: %s", query)
+		d.logger.Debug("Datadog is requesting data by query: %s", query)
 
 		from, to, err := d.getFromTo(d.options.Duration)
 		if err != nil {
@@ -370,11 +379,14 @@ func (d *Datadog) Observe(sr *common.SourceResult) (*common.ObserveResult, error
 		}
 		d.logger.Debug("Datadog interval %d <=> %d", from.UnixMilli(), to.UnixMilli())
 
+		t1 := time.Now()
+
 		mf, err := d.getV2Timeseries(query, *from, *to, d.options.TagUri, d.options.TagCountry)
 		if err != nil {
 			return nil, err
 		}
 		md = mf
+		d.logger.Debug("Datadog data was loaded in %s", time.Since(t1))
 	}
 
 	d.logger.Debug("Datadog metrics found: %d", len(md))

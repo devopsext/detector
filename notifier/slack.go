@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"reflect"
 	"strings"
+	"time"
 
 	"github.com/devopsext/detector/common"
 	sreCommon "github.com/devopsext/sre/common"
@@ -76,6 +77,10 @@ func (s *Slack) execute(mr *vendors.SlackMessageResponse, vr *common.VerifyResul
 
 func (s *Slack) Notify(vr *common.VerifyResult) (*common.NotifyResult, error) {
 
+	s.logger.Debug("Slack is notifying...")
+
+	t1 := time.Now()
+
 	d, err := s.renderTemplate(s.message, vr)
 	if err != nil {
 		return nil, err
@@ -105,6 +110,8 @@ func (s *Slack) Notify(vr *common.VerifyResult) (*common.NotifyResult, error) {
 	if err != nil {
 		s.message.LogError(err)
 	}
+
+	s.logger.Debug("Slack notified in %s", time.Since(t1))
 
 	nr := &common.NotifyResult{
 		Notifier:     s,

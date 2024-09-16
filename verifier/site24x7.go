@@ -258,10 +258,14 @@ func (s *Site24x7) getLogReport(token, ID string) (*vendors.Site24x7LogReportRep
 
 func (s *Site24x7) verifyHttp(oe *common.ObserveEndpoint, token, scheme string, countries []string) (*vendors.Site24x7LogReportData, error) {
 
+	s.logger.Debug("Site24x7 is creating monitor for endpoint %s in countries %s...", oe.URI, countries)
+
 	wmr, err := s.createWebsiteMonitor(token, scheme, oe.URI, countries)
 	if err != nil {
 		return nil, err
 	}
+
+	s.logger.Debug("Site24x7 is polling now for endpoint %s in countries %s...", oe.URI, countries)
 
 	_, err = s.pollNow(token, wmr.Data.MonitorID)
 	if err != nil {
@@ -275,6 +279,8 @@ func (s *Site24x7) verifyHttp(oe *common.ObserveEndpoint, token, scheme string, 
 	var lrr *vendors.Site24x7LogReportReponse
 	var lerr error
 
+	s.logger.Debug("Site24x7 is waiting poll for endpoint %s in countries %s...", oe.URI, countries)
+
 	ret := s.waitPollSuccessOrCancel(ctx, token, wmr.Data.MonitorID)
 	if ret {
 		lr, err := s.getLogReport(token, wmr.Data.MonitorID)
@@ -284,6 +290,8 @@ func (s *Site24x7) verifyHttp(oe *common.ObserveEndpoint, token, scheme string, 
 			lrr = lr
 		}
 	}
+
+	s.logger.Debug("Site24x7 is deleting monitor for endpoint %s in countries %s...", oe.URI, countries)
 
 	_, err = s.deleteMonitor(token, wmr.Data.MonitorID)
 	if err == nil {
@@ -469,10 +477,16 @@ func (s *Site24x7) Verify(or *common.ObserveResult) (*common.VerifyResult, error
 		return nil, errors.New("Site24x7 cannot process empty endpoints")
 	}
 
+	s.logger.Debug("Site24x7 is verifying...")
+
+	t1 := time.Now()
+
 	token, err := s.client.CustomGetAccessToken(s.options.Site24x7Options)
 	if err != nil {
 		return nil, err
 	}
+
+	s.logger.Debug("Site24x7 is getting location templates...")
 
 	locations, err := s.getLocationTemplate(token)
 	if err != nil {
@@ -502,12 +516,18 @@ func (s *Site24x7) Verify(or *common.ObserveResult) (*common.VerifyResult, error
 				}
 				scheme := common.URIScheme(uri)
 
+				s.logger.Debug("Site24x7 is veryfing %s endpoint: %s", scheme, uri)
+				t1 := time.Now()
+
 				switch scheme {
 				case common.URISchemeHttp, common.URISchemeHttps:
+
 					rd, err = s.verifyHttp(oe, token, scheme, countries)
 				default:
 					return fmt.Errorf("Site24x7 has no support for endpoint: %s", uri)
 				}
+
+				s.logger.Debug("Site24x7 verified %s endpoint: %s in %s", scheme, uri, time.Since(t1))
 			}
 
 			if err != nil {
@@ -523,7 +543,13 @@ func (s *Site24x7) Verify(or *common.ObserveResult) (*common.VerifyResult, error
 				Countries: common.VerifyCountries{},
 			}
 
+			s.logger.Debug("Site24x7 is getting log report for endpoint: %s", uri)
+			t1 := time.Now()
+
 			rs := s.getLogReportSummary(oe, locations, rd.Report, vendors.Site24x7DataCollectionTypePollNow)
+
+			s.logger.Debug("Site24x7 got log report for endpoint: %s in %s", uri, time.Since(t1))
+
 			for _, r := range rs {
 
 				vs := ve.Countries[r.Country]
@@ -542,6 +568,8 @@ func (s *Site24x7) Verify(or *common.ObserveResult) (*common.VerifyResult, error
 	if err != nil {
 		return nil, err
 	}
+
+	s.logger.Debug("Site24x7 verified in %s", time.Since(t1))
 
 	vs := common.VerifyEndpoints{}
 	m.Range(func(key, value any) bool {
