@@ -407,7 +407,6 @@ func (a *Simple) Detect() error {
 	defer a.lock.Unlock()
 
 	a.logger.Debug("Simple detector is loading...")
-
 	t1 := time.Now()
 
 	srs, err := a.load()
@@ -419,11 +418,11 @@ func (a *Simple) Detect() error {
 
 	sr := a.mergeSourceResults(srs)
 	if sr == nil {
+		a.logger.Debug("Simple detector has no source results")
 		return nil
 	}
 
 	a.logger.Debug("Simple detector is observing...")
-
 	t2 := time.Now()
 
 	ors, err := a.observe(sr)
@@ -435,11 +434,11 @@ func (a *Simple) Detect() error {
 
 	or := a.mergeObserveResults(ors)
 	if or == nil {
+		a.logger.Debug("Simple detector has no observe results")
 		return nil
 	}
 
 	a.logger.Debug("Simple detector is verifying...")
-
 	t3 := time.Now()
 
 	vrs, err := a.verify(or)
@@ -451,11 +450,11 @@ func (a *Simple) Detect() error {
 
 	vr := a.mergeVerifyResults(vrs)
 	if vr == nil {
+		a.logger.Debug("Simple detector has no verify results")
 		return nil
 	}
 
 	a.logger.Debug("Simple detector is notifying...")
-
 	t4 := time.Now()
 
 	_, err = a.notify(vr)

@@ -281,14 +281,12 @@ func (s *Site24x7) verifyHttp(oe *common.ObserveEndpoint, token, scheme string, 
 
 	s.logger.Debug("Site24x7 is waiting poll for endpoint %s in countries %s...", oe.URI, countries)
 
-	ret := s.waitPollSuccessOrCancel(ctx, token, wmr.Data.MonitorID)
-	if ret {
-		lr, err := s.getLogReport(token, wmr.Data.MonitorID)
-		if err != nil {
-			lerr = err
-		} else {
-			lrr = lr
-		}
+	s.waitPollSuccessOrCancel(ctx, token, wmr.Data.MonitorID)
+	lr, err := s.getLogReport(token, wmr.Data.MonitorID)
+	if err != nil {
+		lerr = err
+	} else {
+		lrr = lr
 	}
 
 	s.logger.Debug("Site24x7 is deleting monitor for endpoint %s in countries %s...", oe.URI, countries)
@@ -370,7 +368,7 @@ func (s *Site24x7) findCountryByLocation(ltd *vendors.Site24x7LocationTemplateDa
 }
 
 func (s *Site24x7) getLogReportSummary(oe *common.ObserveEndpoint, locations *vendors.Site24x7LocationTemplateReponse,
-	report []*vendors.Site24x7LogReportDataReport, collectionType string) []*Site24x7Summary {
+	report []*vendors.Site24x7LogReportDataReport, collectionTypes []string) []*Site24x7Summary {
 
 	r := []*Site24x7Summary{}
 
@@ -399,7 +397,7 @@ func (s *Site24x7) getLogReportSummary(oe *common.ObserveEndpoint, locations *ve
 
 	for _, dr := range report {
 
-		if dr.DataCollectionType != collectionType {
+		if !utils.Contains(collectionTypes, dr.DataCollectionType) {
 			continue
 		}
 
@@ -546,7 +544,8 @@ func (s *Site24x7) Verify(or *common.ObserveResult) (*common.VerifyResult, error
 			s.logger.Debug("Site24x7 is getting log report for endpoint: %s", uri)
 			t1 := time.Now()
 
-			rs := s.getLogReportSummary(oe, locations, rd.Report, vendors.Site24x7DataCollectionTypePollNow)
+			collectionTypes := []string{vendors.Site24x7DataCollectionTypePollNow, vendors.Site24x7DataCollectionTypeNormal}
+			rs := s.getLogReportSummary(oe, locations, rd.Report, collectionTypes)
 
 			s.logger.Debug("Site24x7 got log report for endpoint: %s in %s", uri, time.Since(t1))
 
