@@ -11,14 +11,9 @@ import (
 
 type NotifierProbability = float64
 
-type NotifyResult struct {
-	Notifier     Notifier
-	VerifyResult *VerifyResult
-}
-
 type Notifier interface {
 	Name() string
-	Notify(vr *VerifyResult) (*NotifyResult, error)
+	Notify(vr *VerifyResult) error
 }
 
 type Notifiers struct {

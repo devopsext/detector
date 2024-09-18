@@ -332,6 +332,10 @@ func (d *Datadog) buildQuery(sr *common.SourceResult, query, tagUri string) stri
 	from := ""
 	for _, e := range sr.Endpoints.Items() {
 
+		if e == nil {
+			continue
+		}
+
 		filter := fmt.Sprintf("%s:%s", tagUri, e.URI)
 
 		if !utils.IsEmpty(from) {
@@ -397,6 +401,10 @@ func (d *Datadog) Observe(sr *common.SourceResult) (*common.ObserveResult, error
 	es := common.ObserveEndpoints{}
 
 	for _, e := range sr.Endpoints.Items() {
+
+		if e == nil {
+			continue
+		}
 
 		uri := common.NormalizeURI(e.URI)
 

@@ -1,7 +1,7 @@
 package detector
 
 import (
-	"errors"
+	"fmt"
 	"sync"
 	"time"
 
@@ -12,6 +12,7 @@ import (
 )
 
 type SimpleOptions struct {
+	Name                   string
 	Schedule               string
 	Sources                []common.Source
 	ObserverConfigurations []*common.ObserverConfiguration
@@ -41,7 +42,8 @@ func (a *Simple) load() ([]*common.SourceResult, error) {
 
 	items := a.options.Sources
 	if len(items) == 0 {
-		return nil, errors.New("Simple detector has no sources")
+		err := fmt.Errorf("Simple %s detector has no sources", a.options.Name)
+		return nil, err
 	}
 
 	g := &errgroup.Group{}
@@ -101,7 +103,8 @@ func (a *Simple) observe(sr *common.SourceResult) ([]*common.ObserveResult, erro
 
 	items := a.options.ObserverConfigurations
 	if len(items) == 0 {
-		return nil, errors.New("Simple detector has no observer configurations")
+		err := fmt.Errorf("Simple %s detector has no observer configurations", a.options.Name)
+		return nil, err
 	}
 
 	g := &errgroup.Group{}
@@ -179,7 +182,8 @@ func (a *Simple) verify(or *common.ObserveResult) ([]*common.VerifyResult, error
 
 	items := a.options.VerifierConfigurations
 	if len(items) == 0 {
-		return nil, errors.New("Simple detector has no verifier configurations")
+		err := fmt.Errorf("Simple %s detector has no verifier configurations", a.options.Name)
+		return nil, err
 	}
 
 	g := &errgroup.Group{}
@@ -254,89 +258,66 @@ func (a *Simple) verify(or *common.ObserveResult) ([]*common.VerifyResult, error
 	return r, nil
 }
 
-func (a *Simple) notify(vr *common.VerifyResult) ([]*common.NotifyResult, error) {
+func (a *Simple) notify(vr *common.VerifyResult) error {
 
 	items := a.options.NotifierConfigurations
 	if len(items) == 0 {
-		return nil, errors.New("Simple detector has no notifier configurations")
+		err := fmt.Errorf("Simple %s detector has no notifier configurations", a.options.Name)
+		return err
 	}
 
 	g := &errgroup.Group{}
-	m := &sync.Map{}
 
 	for _, nc := range items {
 
+		es := &common.VerifyEndpoints{}
+
+		for _, e := range vr.Endpoints.Items() {
+
+			if e == nil {
+				continue
+			}
+
+			countries := make(common.VerifyCountries)
+			for k, s := range e.Countries {
+
+				p := s.Probability
+				if p == nil {
+					continue
+				}
+
+				if *p < nc.Probability {
+					continue
+				}
+				countries[k] = s
+			}
+
+			if len(countries) == 0 {
+				continue
+			}
+			en := es.Clone(e)
+			en.Countries = countries
+			es.Add(en)
+		}
+
+		if es.IsEmpty() {
+			continue
+		}
+
 		g.Go(func() error {
 
-			_, err := nc.Notifier.Notify(vr)
+			vrn := &common.VerifyResult{
+				Endpoints: *es,
+			}
+
+			err := nc.Notifier.Notify(vrn)
 			if err != nil {
 				return err
 			}
-
-			/*probability := float64(0.0)
-			vc := verifiersConfig[name]
-			if vc != nil {
-				probability = vc.Probability
-			}
-
-			es := common.VerifyEndpoints{}
-
-			for _, e := range old.Endpoints {
-
-				if e == nil {
-					continue
-				}
-
-				countries := make(common.VerifyCountries)
-				for k, s := range e.Countries {
-
-					p := s.Probability
-					if *p < probability {
-						continue
-					}
-					countries[k] = s
-				}
-
-				if len(countries) == 0 {
-					continue
-				}
-				es = append(es, &common.VerifyEndpoint{
-					URI:             e.URI,
-					Countries:       countries,
-					ObserveEndpoint: e.ObserveEndpoint,
-				})
-			}
-
-			if len(es) == 0 {
-				return nil
-			}
-
-			new := &common.NotifyResult{
-				Notifier:     old.Notifier,
-				VerifyResult: old.VerifyResult,
-			}
-			m.Store(nil, new)
-			*/
 			return nil
 		})
 	}
-
-	err := g.Wait()
-	if err != nil {
-		return nil, err
-	}
-
-	r := []*common.NotifyResult{}
-	m.Range(func(key, value any) bool {
-
-		e, ok := value.(*common.NotifyResult)
-		if !ok {
-			return false
-		}
-		r = append(r, e)
-		return true
-	})
-	return r, nil
+	return g.Wait()
 }
 
 func (a *Simple) mergeSourceResults(srs []*common.SourceResult) *common.SourceResult {
@@ -374,6 +355,7 @@ func (a *Simple) mergeObserveResults(ors []*common.ObserveResult) *common.Observ
 	if eps.IsEmpty() {
 		return nil
 	}
+
 	return &common.ObserveResult{
 		Endpoints: eps,
 	}
@@ -402,67 +384,64 @@ func (a *Simple) mergeVerifyResults(ors []*common.VerifyResult) *common.VerifyRe
 func (a *Simple) Detect() error {
 
 	if !a.lock.TryLock() {
-		return errors.New("Simple detector already in a loop")
+		return fmt.Errorf("Simple %s detector already in a loop", a.options.Name)
 	}
 	defer a.lock.Unlock()
 
-	a.logger.Debug("Simple detector is loading...")
+	a.logger.Debug("Simple %s detector is loading...", a.options.Name)
 	t1 := time.Now()
 
 	srs, err := a.load()
 	if err != nil {
-		a.logger.Debug("Simple detector cannot load from sources, error: %s", err)
-		return err
+		a.logger.Debug("Simple %s detector cannot load from sources, error: %s", a.options.Name, err)
 	}
-	a.logger.Debug("Simple detector sources were loaded in %s", time.Since(t1))
+	a.logger.Debug("Simple %s detector sources were loaded in %s", a.options.Name, time.Since(t1))
 
 	sr := a.mergeSourceResults(srs)
 	if sr == nil {
-		a.logger.Debug("Simple detector has no source results")
+		a.logger.Debug("Simple %s detector has no source results", a.options.Name)
 		return nil
 	}
 
-	a.logger.Debug("Simple detector is observing...")
+	a.logger.Debug("Simple %s detector is observing...", a.options.Name)
 	t2 := time.Now()
 
 	ors, err := a.observe(sr)
 	if err != nil {
-		a.logger.Error("Simple detector cannot observe, error: %s", err)
-		return err
+		a.logger.Error("Simple %s detector cannot observe, error: %s", a.options.Name, err)
 	}
-	a.logger.Debug("Simple detector observed in %s", time.Since(t2))
+	a.logger.Debug("Simple %s detector observed in %s", a.options.Name, time.Since(t2))
 
 	or := a.mergeObserveResults(ors)
 	if or == nil {
-		a.logger.Debug("Simple detector has no observe results")
+		a.logger.Debug("Simple %s detector has no observe results", a.options.Name)
 		return nil
 	}
 
-	a.logger.Debug("Simple detector is verifying...")
+	a.logger.Debug("Simple %s detector is verifying...", a.options.Name)
 	t3 := time.Now()
 
 	vrs, err := a.verify(or)
 	if err != nil {
-		a.logger.Error("Simple detector cannot verify, error: %s", err)
-		return err
+		a.logger.Error("Simple %s detector cannot verify, error: %s", a.options.Name, err)
 	}
-	a.logger.Debug("Simple detector verified in %s", time.Since(t3))
+	a.logger.Debug("Simple %s detector verified in %s", a.options.Name, time.Since(t3))
 
 	vr := a.mergeVerifyResults(vrs)
 	if vr == nil {
-		a.logger.Debug("Simple detector has no verify results")
+		a.logger.Debug("Simple %s detector has no verify results", a.options.Name)
 		return nil
 	}
 
-	a.logger.Debug("Simple detector is notifying...")
+	a.logger.Debug("Simple %s detector is notifying...", a.options.Name)
 	t4 := time.Now()
 
-	_, err = a.notify(vr)
+	err = a.notify(vr)
 	if err != nil {
-		a.logger.Error("Simple detector cannot notify, error: %s", err)
-		return err
+		a.logger.Error("Simple %s detector cannot notify, error: %s", a.options.Name, err)
 	}
-	a.logger.Debug("Simple detector notified in %s", time.Since(t4))
+
+	a.logger.Debug("Simple %s detector notified in %s", a.options.Name, time.Since(t4))
 
 	return nil
 }

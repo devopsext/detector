@@ -63,6 +63,12 @@ var sourceConfig = source.ConfigOptions{
 	Path: envGet("SOURCE_CONFIG_PATH", "").(string),
 }
 
+var observerRandom = observer.RandomOptions{
+	Min:   envGet("OBSERVER_RANDOM_MIN", 0.0).(float64),
+	Max:   envGet("OBSERVER_RANDOM_MAX", 100.0).(float64),
+	Delay: envGet("OBSERVER_RANDOM_DELAY", 100).(int),
+}
+
 var observerDatadog = observer.DatadogOptions{
 	Site:       envGet("OBSERVER_DATADOG_SITE", "").(string),
 	ApiKey:     envGet("OBSERVER_DATADOG_API_KEY", "").(string),
@@ -75,6 +81,12 @@ var observerDatadog = observer.DatadogOptions{
 	Max:        envGet("OBSERVER_DATADOG_MAX", 100.0).(float64),
 	Duration:   envGet("OBSERVER_DATADOG_DURATION", "").(string),
 	Timeout:    envGet("OBSERVER_DATADOG_TIMEOUT", "").(string),
+}
+
+var verifierRandom = verifier.RandomOptions{
+	Min:   envGet("VERIFIER_RANDOM_MIN", 0.0).(float64),
+	Max:   envGet("VERIFIER_RANDOM_MAX", 100.0).(float64),
+	Delay: envGet("VERIFIER_RANDOM_DELAY", 100).(int),
 }
 
 var verifierSite24x7 = verifier.Site24x7Options{
@@ -175,6 +187,7 @@ func getSimpleDetectors(obs *common.Observability, allSources *common.Sources, a
 
 	r := []common.Detector{}
 
+	logger := obs.Logs()
 	sourceKVs := utils.MapGetKeyValues(detectorSimple.Sources)
 
 	for k, v := range sourceKVs {
@@ -219,7 +232,8 @@ func getSimpleDetectors(obs *common.Observability, allSources *common.Sources, a
 		// Detector1=Datadog:0.0;Observer:1.0
 		oc := allObservers.FindConfigurationByPattern(observerCfg)
 		if len(oc) == 0 {
-			oc = allObservers.GetDefaultConfigurations()
+			logger.Debug("Boot couldn't find observers for %s", observerCfg)
+			continue
 		}
 
 		// set verifier configurations
@@ -232,7 +246,8 @@ func getSimpleDetectors(obs *common.Observability, allSources *common.Sources, a
 		// Detector=Site24x7:0.0
 		vc := allVerifiers.FindConfigurationByPattern(verifierCfg)
 		if len(vc) == 0 {
-			vc = allVerifiers.GetDefaultConfigurations()
+			logger.Debug("Boot couldn't find verifiers for %s", verifierCfg)
+			continue
 		}
 
 		// set notifier configurations
@@ -245,10 +260,12 @@ func getSimpleDetectors(obs *common.Observability, allSources *common.Sources, a
 		// Detector=Slack:0.0
 		nc := allNotifiers.FindConfigurationByPattern(notifierCfg)
 		if len(nc) == 0 {
-			nc = allNotifiers.GetDefaultConfigurations()
+			logger.Debug("Boot couldn't find notifiers for %s", notifierCfg)
+			continue
 		}
 
 		opts := detector.SimpleOptions{
+			Name:                   k,
 			Schedule:               schedule,
 			Sources:                sm,
 			ObserverConfigurations: oc,
@@ -309,9 +326,11 @@ func Execute() {
 			sources.Add(source.NewConfig(&sourceConfig, obs))
 
 			observers := common.NewObservers(obs)
+			observers.Add(observer.NewRandom(&observerRandom, obs))
 			observers.Add(observer.NewDatadog(&observerDatadog, obs))
 
 			verifiers := common.NewVerifiers(obs)
+			verifiers.Add(verifier.NewRandom(&verifierRandom, obs))
 			verifiers.Add(verifier.NewSite24x7(&verifierSite24x7, obs))
 			verifiers.Add(verifier.NewHttp(&verifierHttp, obs))
 
@@ -350,6 +369,10 @@ func Execute() {
 
 	flags.StringVar(&sourceConfig.Path, "source-config-path", sourceConfig.Path, "Source config path")
 
+	flags.Float64Var(&observerRandom.Min, "observer-random-min", observerRandom.Min, "Observer random min value")
+	flags.Float64Var(&observerRandom.Max, "observer-random-max", observerRandom.Max, "Observer random max value")
+	flags.IntVar(&observerRandom.Delay, "observer-random-delay", observerRandom.Delay, "Observer random delay")
+
 	flags.StringVar(&observerDatadog.Site, "observer-datadog-site", observerDatadog.Site, "Observer datadog site")
 	flags.StringVar(&observerDatadog.AppKey, "observer-datadog-app-key", observerDatadog.AppKey, "Observer datadog app key")
 	flags.StringVar(&observerDatadog.ApiKey, "observer-datadog-api-key", observerDatadog.ApiKey, "Observer datadog api key")
@@ -361,6 +384,10 @@ func Execute() {
 	flags.Float64Var(&observerDatadog.Max, "observer-datadog-max", observerDatadog.Max, "Observer datadog max value")
 	flags.StringVar(&observerDatadog.Duration, "observer-datadog-duration", observerDatadog.Duration, "Observer datadog duration")
 	flags.StringVar(&observerDatadog.Timeout, "observer-datadog-timeout", observerDatadog.Timeout, "Observer datadog timeout")
+
+	flags.Float64Var(&verifierRandom.Min, "verifier-random-min", verifierRandom.Min, "Verifier random min value")
+	flags.Float64Var(&verifierRandom.Max, "verifier-random-max", verifierRandom.Max, "Verifier random max value")
+	flags.IntVar(&verifierRandom.Delay, "verifier-random-delay", verifierRandom.Delay, "Verifier random delay")
 
 	flags.IntVar(&verifierSite24x7.Site24x7Options.Timeout, "verifier-site24x7-timeout", verifierSite24x7.Site24x7Options.Timeout, "Verifier site24x7 timeout in seconds")
 	flags.BoolVar(&verifierSite24x7.Site24x7Options.Insecure, "verifier-site24x7-insecure", verifierSite24x7.Site24x7Options.Insecure, "Verifier site24x7 insecure")

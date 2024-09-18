@@ -2,6 +2,7 @@ package notifier
 
 import (
 	"encoding/json"
+	"errors"
 	"reflect"
 	"strings"
 	"time"
@@ -75,7 +76,11 @@ func (s *Slack) execute(mr *vendors.SlackMessageResponse, vr *common.VerifyResul
 	return nil
 }
 
-func (s *Slack) Notify(vr *common.VerifyResult) (*common.NotifyResult, error) {
+func (s *Slack) Notify(vr *common.VerifyResult) error {
+
+	if vr.Endpoints.IsEmpty() {
+		return errors.New("Slack cannot process empty endpoints")
+	}
 
 	s.logger.Debug("Slack is notifying...")
 
@@ -83,12 +88,12 @@ func (s *Slack) Notify(vr *common.VerifyResult) (*common.NotifyResult, error) {
 
 	d, err := s.renderTemplate(s.message, vr)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	sd := strings.TrimSpace(string(d))
 	if utils.IsEmpty(sd) {
-		return nil, nil
+		return nil
 	}
 
 	opts := vendors.SlackMessageOptions{
@@ -97,13 +102,13 @@ func (s *Slack) Notify(vr *common.VerifyResult) (*common.NotifyResult, error) {
 	}
 	r, err := s.client.SendMessage(opts)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	mr := vendors.SlackMessageResponse{}
 	err = json.Unmarshal(r, &mr)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	err = s.execute(&mr, vr)
@@ -113,12 +118,7 @@ func (s *Slack) Notify(vr *common.VerifyResult) (*common.NotifyResult, error) {
 
 	s.logger.Debug("Slack notified in %s", time.Since(t1))
 
-	nr := &common.NotifyResult{
-		Notifier:     s,
-		VerifyResult: vr,
-	}
-
-	return nr, nil
+	return nil
 }
 
 func (s *Slack) fIndirect(obj interface{}) interface{} {
