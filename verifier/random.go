@@ -2,6 +2,7 @@ package verifier
 
 import (
 	"errors"
+	"math/rand/v2"
 	"time"
 
 	"github.com/devopsext/detector/common"
@@ -34,9 +35,41 @@ func (rd *Random) Verify(or *common.ObserveResult) (*common.VerifyResult, error)
 	rd.logger.Debug("Random is verifying...")
 	t1 := time.Now()
 
-	rd.logger.Debug("Random verified in %s", time.Since(t1))
-
 	vs := common.VerifyEndpoints{}
+
+	for _, e := range or.Endpoints.Items() {
+
+		if e == nil {
+			continue
+		}
+
+		uri := common.NormalizeURI(e.URI)
+		countries := make(common.VerifyCountries)
+
+		for k := range e.Countries {
+
+			value := rd.options.Min + rand.Float64()*(rd.options.Max-rd.options.Min)
+			status := &common.VerifyStatus{
+				Probability: &value,
+			}
+			country := common.NormalizeCountry(k)
+			countries[country] = status
+		}
+
+		if len(countries) == 0 {
+			continue
+		}
+
+		time.Sleep(time.Duration(rd.options.Delay) * time.Millisecond)
+
+		e := &common.VerifyEndpoint{
+			URI:       uri,
+			Countries: countries,
+		}
+		vs.Add(e)
+	}
+
+	rd.logger.Debug("Random verified in %s", time.Since(t1))
 
 	r := &common.VerifyResult{
 		Endpoints: vs,

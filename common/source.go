@@ -109,7 +109,7 @@ func (ses *SourceEndpoints) Merge(eps *SourceEndpoints) {
 		epCountries := NormalizeCountries(ep.Countries)
 		for _, e := range sameURIs.items {
 
-			same := false
+			same := true
 			if e.Response != nil && ep.Response != nil {
 				same = e.Response.Code == ep.Response.Code && e.Response.Content == ep.Response.Content
 			}

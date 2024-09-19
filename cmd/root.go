@@ -66,7 +66,7 @@ var sourceConfig = source.ConfigOptions{
 var observerRandom = observer.RandomOptions{
 	Min:   envGet("OBSERVER_RANDOM_MIN", 0.0).(float64),
 	Max:   envGet("OBSERVER_RANDOM_MAX", 100.0).(float64),
-	Delay: envGet("OBSERVER_RANDOM_DELAY", 100).(int),
+	Delay: envGet("OBSERVER_RANDOM_DELAY", 0).(int),
 }
 
 var observerDatadog = observer.DatadogOptions{
@@ -86,7 +86,7 @@ var observerDatadog = observer.DatadogOptions{
 var verifierRandom = verifier.RandomOptions{
 	Min:   envGet("VERIFIER_RANDOM_MIN", 0.0).(float64),
 	Max:   envGet("VERIFIER_RANDOM_MAX", 100.0).(float64),
-	Delay: envGet("VERIFIER_RANDOM_DELAY", 100).(int),
+	Delay: envGet("VERIFIER_RANDOM_DELAY", 0).(int),
 }
 
 var verifierSite24x7 = verifier.Site24x7Options{
@@ -114,6 +114,8 @@ var verifierHttp = verifier.HttpOptions{
 	URL: envGet("VERIFIER_HTTP_URL", "").(string),
 }
 
+var notifierLogger = notifier.LoggerOptions{}
+
 var notifierSlack = notifier.SlackOptions{
 	SlackOptions: vendors.SlackOptions{
 		Timeout:  envGet("NOTIFIER_SLACK_TIMEOUT", 30).(int),
@@ -140,21 +142,6 @@ var detectorSimple = DetectorSimpleOptions{
 	Verifiers: envGet("SIMPLE_VERIFIERS", "").(string),
 	Notifiers: envGet("SIMPLE_NOTIFIERS", "").(string),
 }
-
-/*var dSignalOptions = discovery.SignalOptions{
-	Disabled:     strings.Split(envStringExpand("SIGNAL_DISABLED", ""), ","),
-	Schedule:     envGet("SIGNAL_SCHEDULE", "").(string),
-	Query:        envFileContentExpand("SIGNAL_QUERY", ""),
-	QueryPeriod:  envGet("SIGNAL_QUERY_PERIOD", "").(string),
-	QueryStep:    envGet("SIGNAL_QUERY_STEP", "").(string),
-	Metric:       envGet("SIGNAL_METRIC", "").(string),
-	Ident:        envFileContentExpand("SIGNAL_IDENT", ""),
-	Field:        envGet("SIGNAL_FIELD", "").(string),
-	Files:        envFileContentExpand("SIGNAL_FILES", ""),
-	Vars:         envFileContentExpand("SIGNAL_VARS", ""),
-	BaseTemplate: envStringExpand("SIGNAL_BASE_TEMPLATE", ""),
-	CacheSize:    envGet("SIGNAL_CACHE_SIZE", 0).(int),
-}*/
 
 func getOnlyEnv(key string) string {
 	value, ok := os.LookupEnv(key)
@@ -335,6 +322,7 @@ func Execute() {
 			verifiers.Add(verifier.NewHttp(&verifierHttp, obs))
 
 			notifiers := common.NewNotifiers(obs)
+			notifiers.Add(notifier.NewLogger(notifierLogger, obs))
 			notifiers.Add(notifier.NewSlack(notifierSlack, obs))
 
 			detectors := common.NewDetectors(obs)
@@ -420,21 +408,6 @@ func Execute() {
 	flags.StringVar(&detectorSimple.Observers, "detector-simple-observers", detectorSimple.Observers, "Detector simple observers")
 	flags.StringVar(&detectorSimple.Verifiers, "detector-simple-verifiers", detectorSimple.Verifiers, "Detector simple verifiers")
 	flags.StringVar(&detectorSimple.Notifiers, "detector-simple-notifiers", detectorSimple.Notifiers, "Detector simple notifiers")
-
-	// Signal
-	/*
-		flags.StringVar(&dSignalOptions.Schedule, "signal-schedule", dSignalOptions.Schedule, "Signal discovery schedule")
-		flags.StringVar(&dSignalOptions.Query, "signal-query", dSignalOptions.Query, "Signal discovery query")
-		flags.StringVar(&dSignalOptions.QueryPeriod, "signal-query-period", dSignalOptions.QueryPeriod, "Signal discovery query period")
-		flags.StringVar(&dSignalOptions.QueryStep, "signal-query-step", dSignalOptions.QueryStep, "Signal discovery query step")
-		flags.StringVar(&dSignalOptions.Ident, "signal-object", dSignalOptions.Ident, "Signal discovery ident label")
-		flags.StringVar(&dSignalOptions.Field, "signal-field", dSignalOptions.Field, "Signal discovery field label")
-		flags.StringVar(&dSignalOptions.Metric, "signal-metric", dSignalOptions.Metric, "Signal discovery metric label")
-		flags.StringVar(&dSignalOptions.Files, "signal-files", dSignalOptions.Files, "Signal discovery files")
-		flags.StringSliceVar(&dSignalOptions.Disabled, "signal-disabled", dSignalOptions.Disabled, "Signal discovery disabled services")
-		flags.StringVar(&dSignalOptions.BaseTemplate, "signal-base-template", dSignalOptions.BaseTemplate, "Signal discovery base template")
-		flags.StringVar(&dSignalOptions.Vars, "signal-vars", dSignalOptions.Vars, "Signal discovery vars")
-	*/
 
 	interceptSyscall()
 

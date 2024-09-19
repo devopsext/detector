@@ -111,12 +111,47 @@ func (oes *ObserveEndpoints) Merge(eps *ObserveEndpoints) {
 			continue
 		}
 
-		// to do
-		/*
-			for _, _ := range sameURIs.items {
+		epCountries := slices.Collect(maps.Keys(ep.Countries))
 
+		for _, e := range sameURIs.items {
+
+			same := true
+			if e.Response != nil && ep.Response != nil {
+				same = e.Response.Code == ep.Response.Code && e.Response.Content == ep.Response.Content
 			}
-		*/
+
+			if !same {
+				continue
+			}
+
+			countries := make(ObserveCountries)
+			for _, k := range epCountries {
+
+				country := NormalizeCountry(k)
+
+				v1 := float64(0.0)
+				p1 := e.Countries[country]
+				if p1 != nil {
+					v1 = *p1
+				}
+
+				v2 := float64(0.0)
+				p2 := ep.Countries[k]
+				if p2 != nil {
+					v2 = *p2
+				}
+				v := (v1 + v2) / 2
+				countries[k] = &v
+			}
+			e.Countries = countries
+
+			for _, ip := range ep.IPs {
+				if utils.Contains(e.IPs, ip) {
+					continue
+				}
+				e.IPs = append(e.IPs, ip)
+			}
+		}
 	}
 }
 

@@ -76,7 +76,7 @@ func (a *Simple) load() ([]*common.SourceResult, error) {
 				}
 				r.Endpoints.Add(e1)
 			}
-			m.Store(nil, r)
+			m.Store(s.Name(), r)
 			return nil
 		})
 	}
@@ -155,7 +155,7 @@ func (a *Simple) observe(sr *common.SourceResult) ([]*common.ObserveResult, erro
 			new := &common.ObserveResult{
 				Endpoints: es,
 			}
-			m.Store(nil, new)
+			m.Store(oc.Observer.Name(), new)
 			return nil
 		})
 	}
@@ -209,6 +209,10 @@ func (a *Simple) verify(or *common.ObserveResult) ([]*common.VerifyResult, error
 				countries := make(common.VerifyCountries)
 				for k, s := range e.Countries {
 
+					if s == nil {
+						continue
+					}
+
 					p := s.Probability
 					if p == nil {
 						continue
@@ -235,7 +239,7 @@ func (a *Simple) verify(or *common.ObserveResult) ([]*common.VerifyResult, error
 			new := &common.VerifyResult{
 				Endpoints: es,
 			}
-			m.Store(nil, new)
+			m.Store(vc.Verifier.Name(), new)
 			return nil
 		})
 	}

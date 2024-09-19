@@ -42,27 +42,18 @@ func (rd *Random) Observe(sr *common.SourceResult) (*common.ObserveResult, error
 		if e == nil {
 			continue
 		}
-		uri := common.NormalizeURI(e.URI)
 
-		count := 0
+		uri := common.NormalizeURI(e.URI)
 		countries := make(common.ObserveCountries)
 
 		for _, c := range e.Countries {
 
+			value := rd.options.Min + rand.Float64()*(rd.options.Max-rd.options.Min)
 			country := common.NormalizeCountry(c)
-
-			avg := rand.Float64() * (rd.options.Max - rd.options.Min)
-
-			if avg < rd.options.Min || avg > rd.options.Max {
-				countries[country] = nil
-				continue
-			}
-
-			count = count + 1
-			countries[country] = &avg
+			countries[country] = &value
 		}
 
-		if count == 0 {
+		if len(countries) == 0 {
 			continue
 		}
 
