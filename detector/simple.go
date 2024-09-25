@@ -114,48 +114,22 @@ func (a *Simple) observe(sr *common.SourceResult) ([]*common.ObserveResult, erro
 
 		g.Go(func() error {
 
-			old, err := oc.Observer.Observe(sr)
+			or, err := oc.Observer.Observe(sr)
 			if err != nil {
 				return err
 			}
 
-			es := common.ObserveEndpoints{}
-
-			for _, e := range old.Endpoints.Items() {
-
-				if e == nil {
-					continue
-				}
-
-				countries := make(common.ObserveCountries)
-				for k, p := range e.Countries {
-
-					if p == nil {
-						continue
-					}
-
-					if *p < oc.Probability {
-						continue
-					}
-					countries[k] = p
-				}
-
-				if len(countries) == 0 {
-					continue
-				}
-				esp := es.Clone(e)
-				esp.Countries = countries
-				es.Add(esp)
-			}
-
-			if es.IsEmpty() {
+			if or == nil {
 				return nil
 			}
 
-			new := &common.ObserveResult{
-				Endpoints: es,
+			l := len(or.Endpoints.Items())
+			if l == 0 {
+				return nil
 			}
-			m.Store(oc.Observer.Name(), new)
+
+			or.Configuration = oc
+			m.Store(oc.Observer.Name(), or)
 			return nil
 		})
 	}
@@ -193,53 +167,22 @@ func (a *Simple) verify(or *common.ObserveResult) ([]*common.VerifyResult, error
 
 		g.Go(func() error {
 
-			old, err := vc.Verifier.Verify(or)
+			vr, err := vc.Verifier.Verify(or)
 			if err != nil {
 				return err
 			}
 
-			es := common.VerifyEndpoints{}
-
-			for _, e := range old.Endpoints.Items() {
-
-				if e == nil {
-					continue
-				}
-
-				countries := make(common.VerifyCountries)
-				for k, s := range e.Countries {
-
-					if s == nil {
-						continue
-					}
-
-					p := s.Probability
-					if p == nil {
-						continue
-					}
-
-					if *p < vc.Probability {
-						continue
-					}
-					countries[k] = s
-				}
-
-				if len(countries) == 0 {
-					continue
-				}
-				en := es.Clone(e)
-				en.Countries = countries
-				es.Add(en)
-			}
-
-			if es.IsEmpty() {
+			if or == nil {
 				return nil
 			}
 
-			new := &common.VerifyResult{
-				Endpoints: es,
+			l := len(or.Endpoints.Items())
+			if l == 0 {
+				return nil
 			}
-			m.Store(vc.Verifier.Name(), new)
+
+			vr.Configuration = vc
+			m.Store(vc.Verifier.Name(), vr)
 			return nil
 		})
 	}
@@ -333,14 +276,17 @@ func (a *Simple) mergeSourceResults(srs []*common.SourceResult) *common.SourceRe
 		if sr == nil {
 			continue
 		}
-		eps.Merge(&sr.Endpoints)
+		eps.Add(sr.Endpoints.Items()...)
 	}
 
-	if eps.IsEmpty() {
+	r := eps.Reduce()
+
+	if r.IsEmpty() {
 		return nil
 	}
+
 	return &common.SourceResult{
-		Endpoints: eps,
+		Endpoints: r,
 	}
 }
 
@@ -353,35 +299,119 @@ func (a *Simple) mergeObserveResults(ors []*common.ObserveResult) *common.Observ
 		if sr == nil {
 			continue
 		}
-		eps.Merge(&sr.Endpoints)
+
+		if sr.Configuration == nil {
+			continue
+		}
+
+		es := &common.ObserveEndpoints{}
+		for _, e := range sr.Endpoints.Items() {
+
+			if e == nil {
+				continue
+			}
+
+			countries := make(common.ObserveCountries)
+			for k, p := range e.Countries {
+
+				if p == nil {
+					continue
+				}
+
+				if *p < sr.Configuration.Probability {
+					continue
+				}
+				countries[k] = p
+			}
+
+			if len(countries) == 0 {
+				continue
+			}
+			esp := es.Clone(e)
+			esp.Countries = countries
+			es.Add(esp)
+		}
+
+		if es.IsEmpty() {
+			continue
+		}
+
+		eps.Add(es.Items()...)
 	}
 
-	if eps.IsEmpty() {
+	r := eps.Reduce()
+
+	if r.IsEmpty() {
 		return nil
 	}
 
 	return &common.ObserveResult{
-		Endpoints: eps,
+		Endpoints: r,
 	}
 }
 
-func (a *Simple) mergeVerifyResults(ors []*common.VerifyResult) *common.VerifyResult {
+func (a *Simple) mergeVerifyResults(vrs []*common.VerifyResult) *common.VerifyResult {
 
-	eps := common.VerifyEndpoints{}
+	vps := common.VerifyEndpoints{}
 
-	for _, sr := range ors {
+	for _, vr := range vrs {
 
-		if sr == nil {
+		if vr == nil {
 			continue
 		}
-		eps.Merge(&sr.Endpoints)
+
+		if vr.Configuration == nil {
+			continue
+		}
+
+		es := &common.VerifyEndpoints{}
+		for _, e := range vr.Endpoints.Items() {
+
+			if e == nil {
+				continue
+			}
+
+			countries := make(common.VerifyCountries)
+			for k, s := range e.Countries {
+
+				if s == nil {
+					continue
+				}
+
+				p := s.Probability
+				if p == nil {
+					continue
+				}
+
+				if *p < vr.Configuration.Probability {
+					continue
+				}
+				countries[k] = s
+			}
+
+			if len(countries) == 0 {
+				continue
+			}
+			esp := es.Clone(e)
+			esp.Countries = countries
+			es.Add(esp)
+		}
+
+		if es.IsEmpty() {
+			continue
+		}
+
+		vps.Add(es.Items()...)
 	}
 
-	if eps.IsEmpty() {
+	r := vps.Reduce()
+
+	if r.IsEmpty() {
 		return nil
 	}
+
 	return &common.VerifyResult{
-		Endpoints: eps,
+		Endpoints: r,
 	}
 }
 
@@ -407,6 +437,13 @@ func (a *Simple) Detect() error {
 		return nil
 	}
 
+	for _, ep := range sr.Endpoints.Items() {
+		if ep == nil {
+			continue
+		}
+		a.logger.Debug("Simple %s detector source endpoint %s %s", a.options.Name, ep.URI, ep.Countries)
+	}
+
 	a.logger.Debug("Simple %s detector is observing...", a.options.Name)
 	t2 := time.Now()
 
@@ -420,6 +457,17 @@ func (a *Simple) Detect() error {
 	if or == nil {
 		a.logger.Debug("Simple %s detector has no observe results", a.options.Name)
 		return nil
+	}
+
+	for _, ep := range or.Endpoints.Items() {
+		if ep == nil {
+			continue
+		}
+		arr := []string{}
+		for k, v := range ep.Countries {
+			arr = append(arr, fmt.Sprintf("%s=%0.2f", k, *v))
+		}
+		a.logger.Debug("Simple %s detector observed endpoint %s %s", a.options.Name, ep.URI, arr)
 	}
 
 	a.logger.Debug("Simple %s detector is verifying...", a.options.Name)
@@ -437,6 +485,30 @@ func (a *Simple) Detect() error {
 		return nil
 	}
 
+	for _, ep := range vr.Endpoints.Items() {
+		if ep == nil {
+			continue
+		}
+		arr := []string{}
+		for k, s := range ep.Countries {
+			if s == nil {
+				continue
+			}
+			flags := []string{}
+			for f, b := range s.Flags {
+				if b {
+					flags = append(flags, f)
+				}
+			}
+			sflags := ""
+			if len(flags) > 0 {
+				sflags = fmt.Sprintf(":%s", flags)
+			}
+			arr = append(arr, fmt.Sprintf("%s=%0.2f%s", k, *s.Probability, sflags))
+		}
+		a.logger.Debug("Simple %s detector verified endpoint %s %s", a.options.Name, ep.URI, arr)
+	}
+
 	a.logger.Debug("Simple %s detector is notifying...", a.options.Name)
 	t4 := time.Now()
 
@@ -444,7 +516,6 @@ func (a *Simple) Detect() error {
 	if err != nil {
 		a.logger.Error("Simple %s detector cannot notify, error: %s", a.options.Name, err)
 	}
-
 	a.logger.Debug("Simple %s detector notified in %s", a.options.Name, time.Since(t4))
 
 	return nil

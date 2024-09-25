@@ -48,9 +48,14 @@ func (rd *Random) Verify(or *common.ObserveResult) (*common.VerifyResult, error)
 
 		for k := range e.Countries {
 
+			flags := make(common.VerifyStatusFlags)
+			flags[common.VerifyStatusFlagWrongIPAddress] = rand.Int32N(2) == 1
+			flags[common.VerifyStatusFlagWrongResponseCode] = rand.Int32N(2) == 1
+
 			value := rd.options.Min + rand.Float64()*(rd.options.Max-rd.options.Min)
 			status := &common.VerifyStatus{
 				Probability: &value,
+				Flags:       flags,
 			}
 			country := common.NormalizeCountry(k)
 			countries[country] = status

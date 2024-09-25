@@ -4,6 +4,7 @@ import (
 	"maps"
 	"slices"
 	"strconv"
+	"strings"
 
 	sreCommon "github.com/devopsext/sre/common"
 	"github.com/devopsext/utils"
@@ -23,13 +24,14 @@ type ObserveEndpoints struct {
 	items []*ObserveEndpoint
 }
 
-type ObserveResult struct {
-	Endpoints ObserveEndpoints
-}
-
 type ObserverConfiguration struct {
 	Observer    Observer
 	Probability ObserveProbability
+}
+
+type ObserveResult struct {
+	Configuration *ObserverConfiguration
+	Endpoints     ObserveEndpoints
 }
 
 type Observer interface {
@@ -77,82 +79,126 @@ func (oes *ObserveEndpoints) IsEmpty() bool {
 	return len(oes.items) == 0
 }
 
-func (oes *ObserveEndpoints) FindByURI(uri string) *ObserveEndpoints {
+func (oes *ObserveEndpoints) Reduce() ObserveEndpoints {
 
-	r := &ObserveEndpoints{}
-
-	nURI := NormalizeURI(uri)
-	if utils.IsEmpty(nURI) {
-		return r
-	}
-
+	// find same URIs
+	uris := make(map[string][]*ObserveEndpoint)
 	for _, ep := range oes.items {
 
-		epURI := NormalizeURI(ep.URI)
-		if nURI == epURI {
-			r.Add(ep)
-		}
-	}
-	return r
-}
-
-func (oes *ObserveEndpoints) Merge(eps *ObserveEndpoints) {
-
-	if eps == nil {
-		return
-	}
-
-	for _, ep := range eps.items {
-
-		sameURIs := oes.FindByURI(ep.URI)
-		if sameURIs.IsEmpty() {
-			new := oes.Clone(ep)
-			oes.Add(new)
+		if ep == nil {
 			continue
 		}
 
-		epCountries := slices.Collect(maps.Keys(ep.Countries))
+		uri := NormalizeURI(ep.URI)
+		items := uris[uri]
+		if items == nil {
+			items = []*ObserveEndpoint{}
+		}
+		items = append(items, ep)
+		uris[uri] = items
+	}
 
-		for _, e := range sameURIs.items {
+	r := ObserveEndpoints{}
 
-			same := true
-			if e.Response != nil && ep.Response != nil {
-				same = e.Response.Code == ep.Response.Code && e.Response.Content == ep.Response.Content
+	// calculate avg per uri
+	for uri, items := range uris {
+
+		// group by country, add ips, gather responses
+		countries := make(map[string][]*ObserveProbability)
+		ips := []string{}
+		responses := []*SourceEndpointResponse{}
+
+		for _, item := range items {
+
+			for k, v := range item.Countries {
+
+				if v == nil {
+					continue
+				}
+				k := NormalizeCountry(k)
+				values := countries[k]
+				countries[k] = append(values, v)
 			}
 
-			if !same {
+			for _, ip := range item.IPs {
+
+				if utils.Contains(ips, ip) {
+					continue
+				}
+				ips = append(ips, ip)
+			}
+
+			if item.Response != nil {
+				responses = append(responses, item.Response)
+			}
+		}
+
+		// calculate avg per country
+		ecountries := make(ObserveCountries)
+		for k, values := range countries {
+
+			sum := float64(0.0)
+			count := 0
+			for _, v := range values {
+
+				if v == nil {
+					continue
+				}
+				sum = sum + *v
+				count++
+			}
+
+			if count == 0 {
 				continue
 			}
 
-			countries := make(ObserveCountries)
-			for _, k := range epCountries {
+			v := sum / float64(count)
+			ecountries[k] = &v
+		}
 
-				country := NormalizeCountry(k)
+		// build response
+		var response *SourceEndpointResponse
+		if len(responses) > 0 {
 
-				v1 := float64(0.0)
-				p1 := e.Countries[country]
-				if p1 != nil {
-					v1 = *p1
+			codes := []string{}
+			contents := []string{}
+
+			for _, res := range responses {
+
+				if !utils.IsEmpty(res.Code) && !utils.Contains(codes, res.Code) {
+					codes = append(codes, res.Code)
 				}
-
-				v2 := float64(0.0)
-				p2 := ep.Countries[k]
-				if p2 != nil {
-					v2 = *p2
+				if !utils.IsEmpty(res.Content) && !utils.Contains(contents, res.Content) {
+					contents = append(contents, res.Content)
 				}
-				v := (v1 + v2) / 2
-				countries[k] = &v
 			}
-			e.Countries = countries
 
-			for _, ip := range ep.IPs {
-				if utils.Contains(e.IPs, ip) {
-					continue
-				}
-				e.IPs = append(e.IPs, ip)
+			code := ""
+			if len(codes) != 0 {
+				code = strings.Join(codes, "|")
+			}
+
+			content := ""
+			if len(contents) != 0 {
+				content = strings.Join(contents, "|")
+			}
+
+			response = &SourceEndpointResponse{
+				Code:    code,
+				Content: content,
 			}
 		}
+
+		ep := &ObserveEndpoint{
+			URI:       uri,
+			Countries: ecountries,
+			IPs:       ips,
+			Response:  response,
+		}
+		r.Add(ep)
 	}
+
+	return r
 }
 
 // Observers

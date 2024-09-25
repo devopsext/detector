@@ -1,6 +1,8 @@
 package common
 
 import (
+	"strings"
+
 	sreCommon "github.com/devopsext/sre/common"
 	"github.com/devopsext/utils"
 )
@@ -72,68 +74,99 @@ func (ses *SourceEndpoints) IsEmpty() bool {
 	return len(ses.items) == 0
 }
 
-func (ses *SourceEndpoints) FindByURI(uri string) *SourceEndpoints {
+func (ses *SourceEndpoints) Reduce() SourceEndpoints {
 
-	r := &SourceEndpoints{}
-
-	nURI := NormalizeURI(uri)
-	if utils.IsEmpty(nURI) {
-		return r
-	}
-
+	// find same URIs
+	uris := make(map[string][]*SourceEndpoint)
 	for _, ep := range ses.items {
 
-		epURI := NormalizeURI(ep.URI)
-		if nURI == epURI {
-			r.Add(ep)
-		}
-	}
-	return r
-}
-
-func (ses *SourceEndpoints) Merge(eps *SourceEndpoints) {
-
-	if eps == nil {
-		return
-	}
-
-	for _, ep := range eps.items {
-
-		sameURIs := ses.FindByURI(ep.URI)
-		if sameURIs.IsEmpty() {
-			new := ses.Clone(ep)
-			ses.Add(new)
+		if ep == nil {
 			continue
 		}
 
-		epCountries := NormalizeCountries(ep.Countries)
-		for _, e := range sameURIs.items {
+		uri := NormalizeURI(ep.URI)
+		items := uris[uri]
+		if items == nil {
+			items = []*SourceEndpoint{}
+		}
+		items = append(items, ep)
+		uris[uri] = items
+	}
 
-			same := true
-			if e.Response != nil && ep.Response != nil {
-				same = e.Response.Code == ep.Response.Code && e.Response.Content == ep.Response.Content
-			}
+	r := SourceEndpoints{}
 
-			if !same {
-				continue
-			}
+	for uri, items := range uris {
 
-			eCountries := NormalizeCountries(e.Countries)
-			for _, c := range epCountries {
-				if utils.Contains(eCountries, c) {
+		// group by country, add ips, gather responses
+		countries := []string{}
+		ips := []string{}
+		responses := []*SourceEndpointResponse{}
+
+		for _, item := range items {
+
+			for _, c := range item.Countries {
+
+				if utils.Contains(countries, c) {
 					continue
 				}
-				e.Countries = append(e.Countries, c)
+				countries = append(countries, c)
 			}
 
-			for _, ip := range ep.IPs {
-				if utils.Contains(e.IPs, ip) {
+			for _, ip := range item.IPs {
+
+				if utils.Contains(ips, ip) {
 					continue
 				}
-				e.IPs = append(e.IPs, ip)
+				ips = append(ips, ip)
+			}
+
+			if item.Response != nil {
+				responses = append(responses, item.Response)
 			}
 		}
+
+		// build response
+		var response *SourceEndpointResponse
+		if len(responses) > 0 {
+
+			codes := []string{}
+			contents := []string{}
+
+			for _, res := range responses {
+
+				if !utils.IsEmpty(res.Code) && !utils.Contains(codes, res.Code) {
+					codes = append(codes, res.Code)
+				}
+				if !utils.IsEmpty(res.Content) && !utils.Contains(contents, res.Content) {
+					contents = append(contents, res.Content)
+				}
+			}
+
+			code := ""
+			if len(codes) != 0 {
+				code = strings.Join(codes, "|")
+			}
+
+			content := ""
+			if len(contents) != 0 {
+				content = strings.Join(contents, "|")
+			}
+
+			response = &SourceEndpointResponse{
+				Code:    code,
+				Content: content,
+			}
+		}
+
+		ep := &SourceEndpoint{
+			URI:       uri,
+			Countries: countries,
+			IPs:       ips,
+			Response:  response,
+		}
+		r.Add(ep)
 	}
+	return r
 }
 
 // Sources

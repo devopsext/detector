@@ -35,18 +35,19 @@ type VerifyEndpoints struct {
 	items []*VerifyEndpoint
 }
 
+type VerifierConfiguration struct {
+	Verifier    Verifier
+	Probability VerifyProbability
+}
+
 type VerifyResult struct {
-	Endpoints VerifyEndpoints
+	Configuration *VerifierConfiguration
+	Endpoints     VerifyEndpoints
 }
 
 type Verifier interface {
 	Name() string
 	Verify(or *ObserveResult) (*VerifyResult, error)
-}
-
-type VerifierConfiguration struct {
-	Verifier    Verifier
-	Probability VerifyProbability
 }
 
 type Verifiers struct {
@@ -86,47 +87,100 @@ func (ves *VerifyEndpoints) IsEmpty() bool {
 	return len(ves.items) == 0
 }
 
-func (ves *VerifyEndpoints) FindByURI(uri string) *VerifyEndpoints {
+func (ves *VerifyEndpoints) Reduce() VerifyEndpoints {
 
-	r := &VerifyEndpoints{}
-
-	nURI := NormalizeURI(uri)
-	if utils.IsEmpty(nURI) {
-		return r
-	}
-
+	// find same URIs
+	uris := make(map[string][]*VerifyEndpoint)
 	for _, ep := range ves.items {
 
-		epURI := NormalizeURI(ep.URI)
-		if nURI == epURI {
-			r.Add(ep)
-		}
-	}
-	return r
-}
-
-func (ves *VerifyEndpoints) Merge(eps *VerifyEndpoints) {
-
-	if eps == nil {
-		return
-	}
-
-	for _, ep := range eps.items {
-
-		sameURIs := ves.FindByURI(ep.URI)
-		if sameURIs.IsEmpty() {
-			new := ves.Clone(ep)
-			ves.Add(new)
+		if ep == nil {
 			continue
 		}
 
-		// to do
-		/*
-			for _, _ := range sameURIs.items {
-
-			}
-		*/
+		uri := NormalizeURI(ep.URI)
+		items := uris[uri]
+		if items == nil {
+			items = []*VerifyEndpoint{}
+		}
+		items = append(items, ep)
+		uris[uri] = items
 	}
+
+	r := VerifyEndpoints{}
+
+	// calculate avg per uri
+	for uri, items := range uris {
+
+		// group by country, add ips, gather responses
+		countries := make(map[string][]*VerifyStatus)
+
+		for _, item := range items {
+
+			for k, v := range item.Countries {
+
+				if v == nil {
+					continue
+				}
+				k := NormalizeCountry(k)
+				values := countries[k]
+				countries[k] = append(values, v)
+			}
+		}
+
+		// calculate avg per country
+		vcountries := make(VerifyCountries)
+		for k, values := range countries {
+
+			sum := float64(0.0)
+			count := 0
+			flags := make(map[VerifyStatusFlag]bool)
+
+			for _, v := range values {
+
+				if v == nil {
+					continue
+				}
+
+				p := v.Probability
+				if p == nil {
+					continue
+				}
+
+				sum = sum + *p
+				count++
+
+				if len(v.Flags) == 0 {
+					continue
+				}
+
+				for f, b := range v.Flags {
+
+					if !b {
+						continue
+					}
+					flags[f] = b
+				}
+			}
+
+			if count == 0 {
+				continue
+			}
+
+			v := sum / float64(count)
+			vcountries[k] = &VerifyStatus{
+				Probability: &v,
+				Flags:       flags,
+			}
+		}
+
+		ep := &VerifyEndpoint{
+			URI:       uri,
+			Countries: vcountries,
+		}
+		r.Add(ep)
+	}
+
+	return r
 }
 
 // Verifiers
