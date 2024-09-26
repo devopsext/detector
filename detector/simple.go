@@ -31,7 +31,12 @@ const SimpleDetectorName = "Simple"
 // Simple
 
 func (a *Simple) Name() string {
-	return SimpleDetectorName
+
+	name := a.options.Name
+	if utils.IsEmpty(name) {
+		name = SimpleDetectorName
+	}
+	return name
 }
 
 func (a *Simple) Schedule() string {
@@ -67,7 +72,8 @@ func (a *Simple) load() ([]*common.SourceResult, error) {
 				}
 
 				var e1 *common.SourceEndpoint
-				if utils.Contains(e.Detectors, a.Name()) || len(e.Detectors) == 0 {
+				name := a.Name()
+				if utils.Contains(e.Detectors, name) || len(e.Detectors) == 0 {
 					e1 = e
 				}
 

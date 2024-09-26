@@ -63,6 +63,15 @@ var sourceConfig = source.ConfigOptions{
 	Path: envGet("SOURCE_CONFIG_PATH", "").(string),
 }
 
+var sourcePubSub = source.PubSubOptions{
+	Credentials:  envGet("SOURCE_PUBSUB_CREDENTIALS", "").(string),
+	Topic:        envGet("SOURCE_PUBSUB_TOPIC", "").(string),
+	Subscription: envGet("SOURCE_PUBSUB_SUBSCRIPTION", "").(string),
+	Project:      envGet("SOURCE_PUBSUB_PROJECT", "").(string),
+	AckDeadline:  envGet("SOURCE_PUBSUB_ACK_DEADLINE", 20).(int),
+	Retention:    envGet("SOURCE_PUBSUB_RETENTION", 86400).(int),
+}
+
 var observerRandom = observer.RandomOptions{
 	Min:   envGet("OBSERVER_RANDOM_MIN", 0.0).(float64),
 	Max:   envGet("OBSERVER_RANDOM_MAX", 100.0).(float64),
@@ -311,6 +320,7 @@ func Execute() {
 
 			sources := common.NewSources(obs)
 			sources.Add(source.NewConfig(&sourceConfig, obs))
+			sources.Add(source.NewPubSub(&sourcePubSub, obs))
 
 			observers := common.NewObservers(obs)
 			observers.Add(observer.NewRandom(&observerRandom, obs))
@@ -356,6 +366,13 @@ func Execute() {
 	flags.StringVar(&prometheusMetricsOptions.Prefix, "prometheus-metrics-prefix", prometheusMetricsOptions.Prefix, "Prometheus metrics prefix")
 
 	flags.StringVar(&sourceConfig.Path, "source-config-path", sourceConfig.Path, "Source config path")
+
+	flags.StringVar(&sourcePubSub.Credentials, "source-pubsub-credentials", sourcePubSub.Credentials, "Source pubsub credentials")
+	flags.StringVar(&sourcePubSub.Topic, "source-pubsub-topic", sourcePubSub.Topic, "Source pubsub topic")
+	flags.StringVar(&sourcePubSub.Subscription, "source-pubsub-subscription", sourcePubSub.Subscription, "Source pubsub subscription")
+	flags.StringVar(&sourcePubSub.Project, "source-pubsub-project", sourcePubSub.Project, "Source pubsub project")
+	flags.IntVar(&sourcePubSub.AckDeadline, "source-pubsub-ack-deadline", sourcePubSub.AckDeadline, "Source pubsub subscription ack deadline duration seconds")
+	flags.IntVar(&sourcePubSub.Retention, "source-pubsub-retention", sourcePubSub.Retention, "Source pubsub subscription retention duration seconds")
 
 	flags.Float64Var(&observerRandom.Min, "observer-random-min", observerRandom.Min, "Observer random min value")
 	flags.Float64Var(&observerRandom.Max, "observer-random-max", observerRandom.Max, "Observer random max value")

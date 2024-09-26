@@ -1,9 +1,12 @@
 package source
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/devopsext/detector/common"
@@ -33,18 +36,18 @@ func (cs *Config) Name() string {
 	return SourceConfigName
 }
 
-func (cs *Config) loadYaml(file string) (*ConfigFile, error) {
+func (cs *Config) loadFile(path string) (*ConfigFile, error) {
 
-	if utils.IsEmpty(file) {
+	if utils.IsEmpty(path) {
 		return nil, nil
 	}
 
 	raw := ""
 
-	if _, err := os.Stat(file); errors.Is(err, os.ErrNotExist) {
-		raw = file
+	if _, err := os.Stat(path); errors.Is(err, os.ErrNotExist) {
+		raw = path
 	} else {
-		r, err := os.ReadFile(file)
+		r, err := os.ReadFile(path)
 		if err != nil {
 			return nil, err
 		}
@@ -55,11 +58,27 @@ func (cs *Config) loadYaml(file string) (*ConfigFile, error) {
 		return nil, nil
 	}
 
+	ext := strings.Replace(filepath.Ext(path), ".", "", 1)
+	if ext == "" {
+		return nil, nil
+	}
+	ext = strings.ToLower(ext)
+
 	config := &ConfigFile{}
 
-	err := yaml.Unmarshal([]byte(raw), config)
-	if err != nil {
-		return nil, err
+	switch {
+	case ext == "json":
+		err := json.Unmarshal([]byte(raw), config)
+		if err != nil {
+			return nil, err
+		}
+	case (ext == "yaml") || (ext == "yml"):
+		err := yaml.Unmarshal([]byte(raw), config)
+		if err != nil {
+			return nil, err
+		}
+	default:
+		return nil, nil
 	}
 	return config, nil
 }
@@ -70,7 +89,7 @@ func (cs *Config) Load() (*common.SourceResult, error) {
 
 	t1 := time.Now()
 
-	config, err := cs.loadYaml(cs.options.Path)
+	config, err := cs.loadFile(cs.options.Path)
 	if err != nil {
 		return nil, fmt.Errorf("Config cannot read from file %s, error: %s", cs.options.Path, err)
 	}

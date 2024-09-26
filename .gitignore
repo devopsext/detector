@@ -13,8 +13,10 @@ __debug_bin
 .temp/
 .idea/
 config.yml
+config.json
 query.data
 datadog.json
 logreport.json
+pubsub.json
 slack-message.tpl
 slack-runbooks.tpl
