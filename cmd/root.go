@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"os/signal"
@@ -318,9 +319,13 @@ func Execute() {
 
 			obs := common.NewObservability(logs, metrics)
 
+			var cancel context.CancelFunc
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+
 			sources := common.NewSources(obs)
 			sources.Add(source.NewConfig(&sourceConfig, obs))
-			sources.Add(source.NewPubSub(&sourcePubSub, obs))
+			sources.Add(source.NewPubSub(&sourcePubSub, obs, ctx))
 
 			observers := common.NewObservers(obs)
 			observers.Add(observer.NewRandom(&observerRandom, obs))
@@ -338,7 +343,7 @@ func Execute() {
 			detectors := common.NewDetectors(obs)
 			detectors.Add(getSimpleDetectors(obs, sources, observers, verifiers, notifiers)...)
 
-			detectors.Start(rootOptions.RunOnce, rootOptions.SchedulerWait)
+			detectors.Start(ctx, rootOptions.RunOnce, rootOptions.SchedulerWait)
 
 			// start wait if there are some jobs
 			if detectors.Scheduled() {

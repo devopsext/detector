@@ -1,6 +1,7 @@
 package common
 
 import (
+	"context"
 	"strings"
 
 	sreCommon "github.com/devopsext/sre/common"
@@ -31,6 +32,7 @@ type SourceResult struct {
 
 type Source interface {
 	Name() string
+	Start(ctx context.Context) error
 	Load() (*SourceResult, error)
 }
 

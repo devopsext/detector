@@ -1,6 +1,7 @@
 package detector
 
 import (
+	"context"
 	"fmt"
 	"sync"
 	"time"
@@ -61,6 +62,10 @@ func (a *Simple) load() ([]*common.SourceResult, error) {
 			sr, err := s.Load()
 			if err != nil {
 				return err
+			}
+
+			if sr == nil {
+				return nil
 			}
 
 			r := &common.SourceResult{}
@@ -178,7 +183,7 @@ func (a *Simple) verify(or *common.ObserveResult) ([]*common.VerifyResult, error
 				return err
 			}
 
-			if or == nil {
+			if vr == nil {
 				return nil
 			}
 
@@ -418,6 +423,16 @@ func (a *Simple) mergeVerifyResults(vrs []*common.VerifyResult) *common.VerifyRe
 
 	return &common.VerifyResult{
 		Endpoints: r,
+	}
+}
+
+func (a *Simple) Start(ctx context.Context) {
+
+	for _, s := range a.options.Sources {
+		err := s.Start(ctx)
+		if err != nil {
+			a.logger.Error("Simple %s detector has error: %s", err)
+		}
 	}
 }
 

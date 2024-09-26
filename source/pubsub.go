@@ -6,7 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"io"
-	"path/filepath"
+	"sync"
 	"time"
 
 	"cloud.google.com/go/pubsub"
@@ -30,6 +30,7 @@ type PubSub struct {
 	options *PubSubOptions
 	logger  sreCommon.Logger
 	client  *pubsub.Client
+	smap    *sync.Map
 }
 
 const SourcePubSubName = "PubSub"
@@ -61,18 +62,17 @@ func (ps *PubSub) decompress(pl *discovery.PubSubMessagePayload) ([]byte, error)
 	return data, nil
 }
 
-func (ps *PubSub) Load() (*common.SourceResult, error) {
+func (ps *PubSub) Start(ctx context.Context) error {
 
 	ps.logger.Debug("PubSub discovery by topic %s...", ps.options.Topic)
 
-	ctx := context.Background()
 	topic := ps.client.Topic(ps.options.Topic)
 	subID := ps.options.Subscription
 
 	sub := ps.client.Subscription(subID)
 	exists, err := sub.Exists(ctx)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	if !exists {
@@ -82,7 +82,7 @@ func (ps *PubSub) Load() (*common.SourceResult, error) {
 			RetentionDuration: time.Duration(ps.options.Retention) * time.Second,
 		})
 		if err != nil {
-			return nil, err
+			return err
 		}
 		ps.logger.Debug("PubSub subscription %s was created", subID)
 	}
@@ -96,8 +96,6 @@ func (ps *PubSub) Load() (*common.SourceResult, error) {
 			ps.logger.Error("PubSub couldn't unmarshal from %s error: %s", subID, err)
 			return
 		}
-
-		m := make(map[string]interface{})
 
 		for k, v := range pm.Payload {
 
@@ -123,8 +121,13 @@ func (ps *PubSub) Load() (*common.SourceResult, error) {
 					ps.logger.Error("PubSub couldn't unmarshall payload %s from %s to file error: %s", k, subID, err)
 					continue
 				}
-				name := filepath.Base(f.Path)
-				m[name] = &f
+
+				config := []*common.SourceEndpoint{}
+				err = json.Unmarshal(f.Data, &config)
+				if err != nil {
+					continue
+				}
+				ps.smap.Store(f.Path, config)
 
 			case discovery.PubSubMessagePayloadKindFiles:
 
@@ -136,26 +139,49 @@ func (ps *PubSub) Load() (*common.SourceResult, error) {
 				}
 
 				for _, f := range fs {
-					name := filepath.Base(f.Path)
-					m[name] = f
+					config := []*common.SourceEndpoint{}
+					err = json.Unmarshal(f.Data, &config)
+					if err != nil {
+						continue
+					}
+					ps.smap.Store(f.Path, config)
 				}
+
 			case discovery.PubSubMessagePayloadKindUnknown:
 				ps.logger.Error("PubSub couldn't process unknown payload %s from %s", k, subID)
 			}
 		}
 		msg.Ack()
-
-		//
 	})
 
 	if err != nil {
 		ps.logger.Error("PubSub couldn't receive messages from %s error: %s", subID, err)
-		return nil, err
+		return err
 	}
-	return nil, nil
+	return nil
 }
 
-func NewPubSub(options *PubSubOptions, observability *common.Observability) *PubSub {
+func (ps *PubSub) Load() (*common.SourceResult, error) {
+
+	es := common.SourceEndpoints{}
+
+	ps.smap.Range(func(key, value any) bool {
+
+		arr, ok := value.([]*common.SourceEndpoint)
+		if !ok {
+			return false
+		}
+		es.Add(arr...)
+		return true
+	})
+
+	r := &common.SourceResult{
+		Endpoints: es,
+	}
+	return r, nil
+}
+
+func NewPubSub(options *PubSubOptions, observability *common.Observability, ctx context.Context) *PubSub {
 
 	logger := observability.Logs()
 
@@ -173,7 +199,7 @@ func NewPubSub(options *PubSubOptions, observability *common.Observability) *Pub
 
 	o := option.WithCredentialsJSON(data)
 
-	client, err := pubsub.NewClient(context.Background(), options.Project, o)
+	client, err := pubsub.NewClient(ctx, options.Project, o)
 	if err != nil {
 		logger.Error("PubSub new client error: %s", err)
 		return nil
@@ -183,5 +209,6 @@ func NewPubSub(options *PubSubOptions, observability *common.Observability) *Pub
 		options: options,
 		logger:  logger,
 		client:  client,
+		smap:    &sync.Map{},
 	}
 }

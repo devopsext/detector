@@ -1,6 +1,7 @@
 package common
 
 import (
+	"context"
 	"strings"
 	"sync"
 	"time"
@@ -13,6 +14,7 @@ import (
 type Detector interface {
 	Name() string
 	Schedule() string
+	Start(ctx context.Context)
 	Detect() error
 }
 
@@ -70,7 +72,7 @@ func (ds *Detectors) run(wg *sync.WaitGroup, once, wait bool, d Detector) {
 	}
 }
 
-func (ds *Detectors) Start(once, wait bool) {
+func (ds *Detectors) Start(ctx context.Context, once, wait bool) {
 
 	items := ds.items
 	if len(items) == 0 {
@@ -78,6 +80,13 @@ func (ds *Detectors) Start(once, wait bool) {
 	}
 
 	wg := &sync.WaitGroup{}
+	for _, d := range ds.items {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			d.Start(ctx)
+		}()
+	}
 
 	for _, d := range ds.items {
 		ds.run(wg, once, wait, d)

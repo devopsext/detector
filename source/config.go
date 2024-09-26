@@ -1,6 +1,7 @@
 package source
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -81,6 +82,10 @@ func (cs *Config) loadFile(path string) (*ConfigFile, error) {
 		return nil, nil
 	}
 	return config, nil
+}
+
+func (cs *Config) Start(ctx context.Context) error {
+	return nil
 }
 
 func (cs *Config) Load() (*common.SourceResult, error) {
