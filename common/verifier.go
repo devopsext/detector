@@ -4,6 +4,7 @@ import (
 	"maps"
 	"slices"
 	"strconv"
+	"strings"
 
 	sreCommon "github.com/devopsext/sre/common"
 	"github.com/devopsext/utils"
@@ -229,7 +230,8 @@ func (vs *Verifiers) FindConfigurationByPattern(pattern string) []*VerifierConfi
 
 	for _, v := range vs.items {
 
-		name := v.Name()
+		name := strings.ToLower(v.Name())
+
 		if !utils.Contains(keys, name) {
 			continue
 		}

@@ -172,19 +172,20 @@ func (s *Site24x7) pollNow(token, ID string) (*vendors.Site24x7PollStatusReponse
 	return &r, nil
 }
 
-func (s *Site24x7) waitPollSuccessOrCancel(ctx context.Context, token, ID string) bool {
+func (s *Site24x7) waitPollSuccessOrCancel(ctx context.Context, token, ID, name string) bool {
 
 	opts := s.cloneSite24x7Options(s.options.Site24x7Options, token)
 	monitorOpts := vendors.Site24x7MonitorOptions{
 		ID: ID,
 	}
 
+	t := time.Duration(s.options.PollDelay) * time.Second
 	for {
 
 		select {
 		case <-ctx.Done():
 			return false
-		default:
+		case <-time.After(t):
 
 			d, err := s.client.CustomGetPollingStatus(opts, monitorOpts)
 			if err != nil {
@@ -202,10 +203,11 @@ func (s *Site24x7) waitPollSuccessOrCancel(ctx context.Context, token, ID string
 				continue
 			}
 
+			s.logger.Debug("Site24x7 verifier polling status %s for monitor %s", r.Data.Status, name)
+
 			if strings.ToLower(r.Data.Status) == "completed" {
 				return true
 			}
-			time.Sleep(time.Duration(s.options.PollDelay))
 		}
 	}
 }
@@ -271,14 +273,14 @@ func (s *Site24x7) verifyHttp(oe *common.ObserveEndpoint, token, scheme string, 
 	}
 
 	var cancel context.CancelFunc
-	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(s.options.PollTimeout*int(time.Second)))
+	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(s.options.PollTimeout)*time.Second)
 	defer cancel()
 
 	var lrr *vendors.Site24x7LogReportReponse
 	var lerr error
 
 	s.logger.Debug("Site24x7 verifier is waiting poll for monitor %s...", wmr.Data.DisplayName)
-	s.waitPollSuccessOrCancel(ctx, token, wmr.Data.MonitorID)
+	s.waitPollSuccessOrCancel(ctx, token, wmr.Data.MonitorID, name)
 
 	s.logger.Debug("Site24x7 verifier is getting log report for monitor %s...", wmr.Data.DisplayName)
 	lr, err := s.getLogReport(token, wmr.Data.MonitorID)

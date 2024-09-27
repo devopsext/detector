@@ -4,6 +4,7 @@ import (
 	"maps"
 	"slices"
 	"strconv"
+	"strings"
 
 	sreCommon "github.com/devopsext/sre/common"
 	"github.com/devopsext/utils"
@@ -70,7 +71,8 @@ func (ns *Notifiers) FindConfigurationByPattern(pattern string) []*NotifierConfi
 
 	for _, v := range ns.items {
 
-		name := v.Name()
+		name := strings.ToLower(v.Name())
+
 		if !utils.Contains(keys, name) {
 			continue
 		}

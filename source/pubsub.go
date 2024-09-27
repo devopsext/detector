@@ -143,7 +143,13 @@ func (ps *PubSub) Start(ctx context.Context) error {
 		ps.logger.Debug("PubSub source subscription %s was created", subID)
 	}
 
-	err = sub.Receive(ctx, func(_ context.Context, msg *pubsub.Message) {
+	err = sub.Receive(ctx, func(rctx context.Context, msg *pubsub.Message) {
+
+		_, ok := ctx.Deadline()
+		if ok {
+			msg.Nack()
+			return
+		}
 
 		var pm discovery.PubSubMessage
 		err := json.Unmarshal(msg.Data, &pm)

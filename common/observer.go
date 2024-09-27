@@ -247,7 +247,8 @@ func (ob *Observers) FindConfigurationByPattern(pattern string) []*ObserverConfi
 
 	for _, o := range ob.items {
 
-		name := o.Name()
+		name := strings.ToLower(o.Name())
+
 		if !utils.Contains(keys, name) {
 			continue
 		}

@@ -118,7 +118,7 @@ var verifierSite24x7 = verifier.Site24x7Options{
 	ThresholdProfileID:    envGet("VERIFIER_SITE24X7_THRESHOLD_PROFILE_ID", "").(string),
 	UserGroupIDs:          strings.Split(envGet("VERIFIER_SITE24X7_USER_GROUP_IDS", "").(string), ","),
 	PollTimeout:           envGet("VERIFIER_SITE24X7_POLL_TIMEOUT", 160).(int),
-	PollDelay:             envGet("VERIFIER_SITE24X7_POLL_DELAY", 500).(int),
+	PollDelay:             envGet("VERIFIER_SITE24X7_POLL_DELAY", 5).(int),
 	LogReportFile:         envGet("VERIFIER_SITE24X7_LOG_REPORT_FILE", "").(string),
 }
 
@@ -229,7 +229,7 @@ func getSimpleDetectors(obs *common.Observability, allSources *common.Sources, a
 		observerCfg := ""
 		observerKVs := utils.MapGetKeyValues(detectorSimple.Observers)
 		if !utils.IsEmpty(observerKVs[k]) {
-			observerCfg = observerKVs[k]
+			observerCfg = strings.ToLower(observerKVs[k])
 		}
 
 		// Detector1=Datadog:0.0;Observer:1.0
@@ -243,7 +243,7 @@ func getSimpleDetectors(obs *common.Observability, allSources *common.Sources, a
 		verifierCfg := ""
 		verifierKVs := utils.MapGetKeyValues(detectorSimple.Verifiers)
 		if !utils.IsEmpty(verifierKVs[k]) {
-			verifierCfg = verifierKVs[k]
+			verifierCfg = strings.ToLower(verifierKVs[k])
 		}
 
 		// Detector=Site24x7:0.0
@@ -257,7 +257,7 @@ func getSimpleDetectors(obs *common.Observability, allSources *common.Sources, a
 		notifierCfg := ""
 		notifierKVs := utils.MapGetKeyValues(detectorSimple.Notifiers)
 		if !utils.IsEmpty(notifierKVs[k]) {
-			notifierCfg = notifierKVs[k]
+			notifierCfg = strings.ToLower(notifierKVs[k])
 		}
 
 		// Detector=Slack:0.0
@@ -347,6 +347,9 @@ func Execute() {
 			detectors.Add(getSimpleDetectors(obs, sources, observers, verifiers, notifiers)...)
 
 			detectors.Start(rootOptions.RunOnce, rootOptions.SchedulerWait, ctx)
+
+			// notifier cache needed (with TTL) ... send to Slack if there is no in cache
+			// process only certain countries, endpoints???
 
 			// start wait if there are some jobs
 			if detectors.Scheduled() {
