@@ -29,10 +29,10 @@ func (rd *Random) Name() string {
 func (rd *Random) Verify(or *common.ObserveResult) (*common.VerifyResult, error) {
 
 	if or.Endpoints.IsEmpty() {
-		return nil, errors.New("Random cannot process empty endpoints")
+		return nil, errors.New("Random verifier cannot process empty endpoints")
 	}
 
-	rd.logger.Debug("Random is verifying...")
+	rd.logger.Debug("Random verifier is processing...")
 	t1 := time.Now()
 
 	vs := common.VerifyEndpoints{}
@@ -74,7 +74,7 @@ func (rd *Random) Verify(or *common.ObserveResult) (*common.VerifyResult, error)
 		vs.Add(e)
 	}
 
-	rd.logger.Debug("Random verified in %s", time.Since(t1))
+	rd.logger.Debug("Random verifier spent %s", time.Since(t1))
 
 	r := &common.VerifyResult{
 		Endpoints: vs,

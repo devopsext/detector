@@ -431,7 +431,7 @@ func (a *Simple) Start(ctx context.Context) {
 	for _, s := range a.options.Sources {
 		err := s.Start(ctx)
 		if err != nil {
-			a.logger.Error("Simple %s detector has error: %s", err)
+			a.logger.Error("Simple %s detector has error: %s", a.Name(), err)
 		}
 	}
 }

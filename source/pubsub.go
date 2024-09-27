@@ -6,6 +6,8 @@ import (
 	"context"
 	"encoding/json"
 	"io"
+	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -24,19 +26,31 @@ type PubSubOptions struct {
 	Subscription string
 	AckDeadline  int
 	Retention    int
+	ConfigFiles  string
+	Replacements string
 }
 
 type PubSub struct {
-	options *PubSubOptions
-	logger  sreCommon.Logger
-	client  *pubsub.Client
-	smap    *sync.Map
+	options      *PubSubOptions
+	logger       sreCommon.Logger
+	client       *pubsub.Client
+	smap         *sync.Map
+	replacements map[string]string
 }
 
 const SourcePubSubName = "PubSub"
 
 func (ps *PubSub) Name() string {
 	return SourcePubSubName
+}
+
+func (ps *PubSub) replace(s string) string {
+
+	r := s
+	for k, v := range ps.replacements {
+		r = strings.Replace(r, k, v, 1)
+	}
+	return r
 }
 
 func (ps *PubSub) decompress(pl *discovery.PubSubMessagePayload) ([]byte, error) {
@@ -62,9 +76,51 @@ func (ps *PubSub) decompress(pl *discovery.PubSubMessagePayload) ([]byte, error)
 	return data, nil
 }
 
+func (ps *PubSub) loadFiles(files string) {
+
+	ps.logger.Debug("PubSub source is loading files from %s...", files)
+
+	list, err := filepath.Glob(files)
+	if err != nil {
+		ps.logger.Debug("PubSub source couldn't find files from %s, error: %s", files, err)
+		return
+	}
+
+	for _, item := range list {
+
+		if !utils.FileExists(item) {
+			continue
+		}
+
+		data, err := utils.Content(item)
+		if err != nil {
+			ps.logger.Debug("PubSub source couldn't load file %s, error: %s", item, err)
+			continue
+		}
+
+		var config ConfigFile
+		err = json.Unmarshal(data, &config)
+		if err != nil {
+			continue
+		}
+		if len(config.Endpoints) == 0 {
+			continue
+		}
+		es := common.CheckSourceEndpoints(config.Endpoints)
+		if len(es) == 0 {
+			continue
+		}
+		ps.smap.Store(item, es)
+	}
+}
+
 func (ps *PubSub) Start(ctx context.Context) error {
 
-	ps.logger.Debug("PubSub discovery by topic %s...", ps.options.Topic)
+	if !utils.IsEmpty(ps.options.ConfigFiles) {
+		ps.loadFiles(ps.options.ConfigFiles)
+	}
+
+	ps.logger.Debug("PubSub source is processing topic %s...", ps.options.Topic)
 
 	topic := ps.client.Topic(ps.options.Topic)
 	subID := ps.options.Subscription
@@ -84,7 +140,7 @@ func (ps *PubSub) Start(ctx context.Context) error {
 		if err != nil {
 			return err
 		}
-		ps.logger.Debug("PubSub subscription %s was created", subID)
+		ps.logger.Debug("PubSub source subscription %s was created", subID)
 	}
 
 	err = sub.Receive(ctx, func(_ context.Context, msg *pubsub.Message) {
@@ -93,22 +149,24 @@ func (ps *PubSub) Start(ctx context.Context) error {
 		err := json.Unmarshal(msg.Data, &pm)
 		if err != nil {
 			msg.Nack()
-			ps.logger.Error("PubSub couldn't unmarshal from %s error: %s", subID, err)
+			ps.logger.Error("PubSub source couldn't unmarshal from %s error: %s", subID, err)
 			return
 		}
 
+		m := make(map[string][]*common.SourceEndpoint)
+
 		for k, v := range pm.Payload {
 
-			ps.logger.Debug("PubSub is processing payload %s from %s", k, subID)
+			ps.logger.Debug("PubSub source is processing payload %s from %s", k, subID)
 
 			if v.Kind == discovery.PubSubMessagePayloadKindUnknown {
-				ps.logger.Error("PubSub couldn't process unknown payload %s from %s error: %s", k, subID, err)
+				ps.logger.Error("PubSub source couldn't process unknown payload %s from %s error: %s", k, subID, err)
 				continue
 			}
 
 			data, err := ps.decompress(v)
 			if err != nil {
-				ps.logger.Error("PubSub couldn't decompress payload %s from %s error: %s", k, subID, err)
+				ps.logger.Error("PubSub source couldn't decompress payload %s from %s error: %s", k, subID, err)
 				continue
 			}
 
@@ -118,44 +176,61 @@ func (ps *PubSub) Start(ctx context.Context) error {
 				var f discovery.PubSubMessagePayloadFile
 				err := json.Unmarshal(data, &f)
 				if err != nil {
-					ps.logger.Error("PubSub couldn't unmarshall payload %s from %s to file error: %s", k, subID, err)
+					ps.logger.Error("PubSub source couldn't unmarshall payload %s from %s to file error: %s", k, subID, err)
 					continue
 				}
 
-				config := []*common.SourceEndpoint{}
-				err = json.Unmarshal(f.Data, &config)
+				es := []*common.SourceEndpoint{}
+				err = json.Unmarshal(f.Data, &es)
 				if err != nil {
 					continue
 				}
-				ps.smap.Store(f.Path, config)
+				es = common.CheckSourceEndpoints(es)
+				if len(es) > 0 {
+					path := ps.replace(f.Path)
+					m[path] = es
+				}
 
 			case discovery.PubSubMessagePayloadKindFiles:
 
 				var fs []*discovery.PubSubMessagePayloadFile
 				err := json.Unmarshal(data, &fs)
 				if err != nil {
-					ps.logger.Error("PubSub couldn't unmarshall payload %s from %s to files error: %s", k, subID, err)
+					ps.logger.Error("PubSub source couldn't unmarshall payload %s from %s to files error: %s", k, subID, err)
 					continue
 				}
 
 				for _, f := range fs {
-					config := []*common.SourceEndpoint{}
-					err = json.Unmarshal(f.Data, &config)
+					es := []*common.SourceEndpoint{}
+					err = json.Unmarshal(f.Data, &es)
 					if err != nil {
 						continue
 					}
-					ps.smap.Store(f.Path, config)
+					es = common.CheckSourceEndpoints(es)
+					if len(es) == 0 {
+						return
+					}
+					path := ps.replace(f.Path)
+					m[path] = es
 				}
 
 			case discovery.PubSubMessagePayloadKindUnknown:
-				ps.logger.Error("PubSub couldn't process unknown payload %s from %s", k, subID)
+				ps.logger.Error("PubSub source couldn't process unknown payload %s from %s", k, subID)
 			}
 		}
+
+		if len(m) > 0 {
+			ps.smap.Clear()
+			for k, v := range m {
+				ps.smap.Store(k, v)
+			}
+		}
+
 		msg.Ack()
 	})
 
 	if err != nil {
-		ps.logger.Error("PubSub couldn't receive messages from %s error: %s", subID, err)
+		ps.logger.Error("PubSub source couldn't receive messages from %s error: %s", subID, err)
 		return err
 	}
 	return nil
@@ -187,13 +262,13 @@ func NewPubSub(options *PubSubOptions, observability *common.Observability, ctx 
 
 	if utils.IsEmpty(options.Credentials) || utils.IsEmpty(options.Topic) ||
 		utils.IsEmpty(options.Subscription) || utils.IsEmpty(options.Project) {
-		logger.Debug("PubSub is disabled. Skipped")
+		logger.Debug("PubSub source is disabled. Skipped")
 		return nil
 	}
 
 	data, err := utils.Content(options.Credentials)
 	if err != nil {
-		logger.Debug("PubSub credentials error: %s", err)
+		logger.Debug("PubSub source credentials error: %s", err)
 		return nil
 	}
 
@@ -201,14 +276,17 @@ func NewPubSub(options *PubSubOptions, observability *common.Observability, ctx 
 
 	client, err := pubsub.NewClient(ctx, options.Project, o)
 	if err != nil {
-		logger.Error("PubSub new client error: %s", err)
+		logger.Error("PubSub source new client error: %s", err)
 		return nil
 	}
 
+	replacements := utils.MapGetKeyValues(options.Replacements)
+
 	return &PubSub{
-		options: options,
-		logger:  logger,
-		client:  client,
-		smap:    &sync.Map{},
+		options:      options,
+		logger:       logger,
+		client:       client,
+		smap:         &sync.Map{},
+		replacements: replacements,
 	}
 }

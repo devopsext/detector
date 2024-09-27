@@ -258,13 +258,13 @@ func (s *Site24x7) verifyHttp(oe *common.ObserveEndpoint, token, scheme string, 
 	suffix := fmt.Sprintf("%s [%s] %s", s.options.MonitorName, strings.Join(countries, ","), murl)
 	name := fmt.Sprintf("%s %s", s.options.MonitorName, common.Md5ToString([]byte(suffix)))
 
-	s.logger.Debug("Site24x7 is creating monitor %s for endpoint %s in countries %s...", name, oe.URI, countries)
+	s.logger.Debug("Site24x7 verifier is creating monitor %s for endpoint %s in countries %s...", name, oe.URI, countries)
 	wmr, err := s.createWebsiteMonitor(token, name, murl, countries)
 	if err != nil {
 		return nil, err
 	}
 
-	s.logger.Debug("Site24x7 is polling now monitor %s...", wmr.Data.DisplayName)
+	s.logger.Debug("Site24x7 verifier is polling now monitor %s...", wmr.Data.DisplayName)
 	_, err = s.pollNow(token, wmr.Data.MonitorID)
 	if err != nil {
 		return nil, err
@@ -277,10 +277,10 @@ func (s *Site24x7) verifyHttp(oe *common.ObserveEndpoint, token, scheme string, 
 	var lrr *vendors.Site24x7LogReportReponse
 	var lerr error
 
-	s.logger.Debug("Site24x7 is waiting poll for monitor %s...", wmr.Data.DisplayName)
+	s.logger.Debug("Site24x7 verifier is waiting poll for monitor %s...", wmr.Data.DisplayName)
 	s.waitPollSuccessOrCancel(ctx, token, wmr.Data.MonitorID)
 
-	s.logger.Debug("Site24x7 is getting log report for monitor %s...", wmr.Data.DisplayName)
+	s.logger.Debug("Site24x7 verifier is getting log report for monitor %s...", wmr.Data.DisplayName)
 	lr, err := s.getLogReport(token, wmr.Data.MonitorID)
 	if err != nil {
 		lerr = err
@@ -288,7 +288,7 @@ func (s *Site24x7) verifyHttp(oe *common.ObserveEndpoint, token, scheme string, 
 		lrr = lr
 	}
 
-	s.logger.Debug("Site24x7 is deleting monitor %s...", wmr.Data.DisplayName)
+	s.logger.Debug("Site24x7 verifier is deleting monitor %s...", wmr.Data.DisplayName)
 	_, err = s.deleteMonitor(token, wmr.Data.MonitorID)
 	if err == nil {
 		s.deleteLocationProfile(token, wmr.Data.LocationProfileID)
@@ -470,10 +470,10 @@ func (s *Site24x7) processLogReportSummary(oe *common.ObserveEndpoint, locations
 func (s *Site24x7) Verify(or *common.ObserveResult) (*common.VerifyResult, error) {
 
 	if or.Endpoints.IsEmpty() {
-		return nil, errors.New("Site24x7 cannot process empty endpoints")
+		return nil, errors.New("Site24x7 verifier cannot process empty endpoints")
 	}
 
-	s.logger.Debug("Site24x7 is verifying...")
+	s.logger.Debug("Site24x7 verifier is processing...")
 	t1 := time.Now()
 
 	token, err := s.client.CustomGetAccessToken(s.options.Site24x7Options)
@@ -481,7 +481,7 @@ func (s *Site24x7) Verify(or *common.ObserveResult) (*common.VerifyResult, error
 		return nil, err
 	}
 
-	s.logger.Debug("Site24x7 is getting location templates...")
+	s.logger.Debug("Site24x7 verifier is getting location templates...")
 
 	locations, err := s.getLocationTemplate(token)
 	if err != nil {
@@ -511,7 +511,7 @@ func (s *Site24x7) Verify(or *common.ObserveResult) (*common.VerifyResult, error
 				}
 				scheme := common.URIScheme(uri)
 
-				s.logger.Debug("Site24x7 is veryfing %s endpoint %s in countries %s", scheme, uri, countries)
+				s.logger.Debug("Site24x7 verifier is checking %s endpoint %s in countries %s", scheme, uri, countries)
 				t1 := time.Now()
 
 				switch scheme {
@@ -519,14 +519,14 @@ func (s *Site24x7) Verify(or *common.ObserveResult) (*common.VerifyResult, error
 
 					rd, err = s.verifyHttp(oe, token, scheme, countries)
 				default:
-					return fmt.Errorf("Site24x7 has no support for %s endpoint %s in countries %s", scheme, uri, countries)
+					return fmt.Errorf("Site24x7 verifier has no support for %s endpoint %s in countries %s", scheme, uri, countries)
 				}
 
-				s.logger.Debug("Site24x7 verified %s endpoint %s in %s in %s", scheme, uri, countries, time.Since(t1))
+				s.logger.Debug("Site24x7 verifier checked %s endpoint %s in %s in %s", scheme, uri, countries, time.Since(t1))
 			}
 
 			if err != nil {
-				return fmt.Errorf("Site24x7 has error: %s", err)
+				return fmt.Errorf("Site24x7 verifier has error: %s", err)
 			}
 
 			if rd == nil {
@@ -560,7 +560,7 @@ func (s *Site24x7) Verify(or *common.ObserveResult) (*common.VerifyResult, error
 		return nil, err
 	}
 
-	s.logger.Debug("Site24x7 verified in %s", time.Since(t1))
+	s.logger.Debug("Site24x7 verifier spent %s", time.Since(t1))
 
 	vs := common.VerifyEndpoints{}
 	m.Range(func(key, value any) bool {
@@ -584,12 +584,12 @@ func NewSite24x7(options *Site24x7Options, observability *common.Observability) 
 	logger := observability.Logs()
 
 	if utils.IsEmpty(options.Site24x7Options.ClientID) || utils.IsEmpty(options.Site24x7Options.ClientSecret) {
-		logger.Debug("Site24x7 client ID or secret is not defined. Skipped.")
+		logger.Debug("Site24x7 verifier client ID or secret is not defined. Skipped.")
 		return nil
 	}
 
 	if utils.IsEmpty(options.Site24x7Options.RefreshToken) {
-		logger.Debug("Site24x7 refresh token is not defined. Skipped.")
+		logger.Debug("Site24x7 verifier refresh token is not defined. Skipped.")
 		return nil
 	}
 

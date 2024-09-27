@@ -71,6 +71,8 @@ var sourcePubSub = source.PubSubOptions{
 	Project:      envGet("SOURCE_PUBSUB_PROJECT", "").(string),
 	AckDeadline:  envGet("SOURCE_PUBSUB_ACK_DEADLINE", 20).(int),
 	Retention:    envGet("SOURCE_PUBSUB_RETENTION", 86400).(int),
+	ConfigFiles:  envStringExpand("SOURCE_PUBSUB_CONFIG_FILES", ""),
+	Replacements: envGet("SOURCE_PUBSUB_REPLACEMENTS", "").(string),
 }
 
 var observerRandom = observer.RandomOptions{
@@ -135,6 +137,10 @@ var notifierSlack = notifier.SlackOptions{
 	Channel:  envGet("NOTIFIER_SLACK_CHANNEL", "").(string),
 	Message:  envFileContentExpand("NOTIFIER_SLACK_MESSAGE", ""),
 	Runbooks: envFileContentExpand("NOTIFIER_SLACK_RUNBOOKS", ""),
+}
+
+var detectorOptions = common.DetectorOptions{
+	StartTimeout: envGet("START_TIMEOUT", 5).(int),
 }
 
 type DetectorSimpleOptions struct {
@@ -318,10 +324,7 @@ func Execute() {
 		Run: func(cmd *cobra.Command, args []string) {
 
 			obs := common.NewObservability(logs, metrics)
-
-			var cancel context.CancelFunc
-			ctx, cancel := context.WithCancel(context.Background())
-			defer cancel()
+			ctx := context.Background()
 
 			sources := common.NewSources(obs)
 			sources.Add(source.NewConfig(&sourceConfig, obs))
@@ -340,10 +343,10 @@ func Execute() {
 			notifiers.Add(notifier.NewLogger(notifierLogger, obs))
 			notifiers.Add(notifier.NewSlack(notifierSlack, obs))
 
-			detectors := common.NewDetectors(obs)
+			detectors := common.NewDetectors(&detectorOptions, obs)
 			detectors.Add(getSimpleDetectors(obs, sources, observers, verifiers, notifiers)...)
 
-			detectors.Start(ctx, rootOptions.RunOnce, rootOptions.SchedulerWait)
+			detectors.Start(rootOptions.RunOnce, rootOptions.SchedulerWait, ctx)
 
 			// start wait if there are some jobs
 			if detectors.Scheduled() {
@@ -378,6 +381,8 @@ func Execute() {
 	flags.StringVar(&sourcePubSub.Project, "source-pubsub-project", sourcePubSub.Project, "Source pubsub project")
 	flags.IntVar(&sourcePubSub.AckDeadline, "source-pubsub-ack-deadline", sourcePubSub.AckDeadline, "Source pubsub subscription ack deadline duration seconds")
 	flags.IntVar(&sourcePubSub.Retention, "source-pubsub-retention", sourcePubSub.Retention, "Source pubsub subscription retention duration seconds")
+	flags.StringVar(&sourcePubSub.ConfigFiles, "source-pubsub-config-files", sourcePubSub.ConfigFiles, "Source pubsub config files")
+	flags.StringVar(&sourcePubSub.Replacements, "source-pubsub-replacements", sourcePubSub.Replacements, "Source pubsub replacements")
 
 	flags.Float64Var(&observerRandom.Min, "observer-random-min", observerRandom.Min, "Observer random min value")
 	flags.Float64Var(&observerRandom.Max, "observer-random-max", observerRandom.Max, "Observer random max value")
@@ -430,6 +435,8 @@ func Execute() {
 	flags.StringVar(&detectorSimple.Observers, "detector-simple-observers", detectorSimple.Observers, "Detector simple observers")
 	flags.StringVar(&detectorSimple.Verifiers, "detector-simple-verifiers", detectorSimple.Verifiers, "Detector simple verifiers")
 	flags.StringVar(&detectorSimple.Notifiers, "detector-simple-notifiers", detectorSimple.Notifiers, "Detector simple notifiers")
+
+	flags.IntVar(&detectorOptions.StartTimeout, "start-timeout", detectorOptions.StartTimeout, "Detector start timeout")
 
 	interceptSyscall()
 

@@ -79,10 +79,10 @@ func (s *Slack) execute(mr *vendors.SlackMessageResponse, vr *common.VerifyResul
 func (s *Slack) Notify(vr *common.VerifyResult) error {
 
 	if vr.Endpoints.IsEmpty() {
-		return errors.New("Slack cannot process empty endpoints")
+		return errors.New("Slack notifier cannot process empty endpoints")
 	}
 
-	s.logger.Debug("Slack is notifying...")
+	s.logger.Debug("Slack notifier is processing...")
 
 	t1 := time.Now()
 
@@ -116,7 +116,7 @@ func (s *Slack) Notify(vr *common.VerifyResult) error {
 		s.message.LogError(err)
 	}
 
-	s.logger.Debug("Slack notified in %s", time.Since(t1))
+	s.logger.Debug("Slack notifier spent %s", time.Since(t1))
 
 	return nil
 }
@@ -133,12 +133,12 @@ func NewSlack(options SlackOptions, observability *common.Observability) *Slack 
 	logger := observability.Logs()
 
 	if utils.IsEmpty(options.Token) {
-		logger.Debug("Slack token is not defined. Skipped.")
+		logger.Debug("Slack notifier token is not defined. Skipped.")
 		return nil
 	}
 
 	if utils.IsEmpty(options.Message) {
-		logger.Debug("Slack message is not defined. Skipped.")
+		logger.Debug("Slack notifier message is not defined. Skipped.")
 		return nil
 	}
 
@@ -156,7 +156,7 @@ func NewSlack(options SlackOptions, observability *common.Observability) *Slack 
 	}
 	message, err := toolsRender.NewTextTemplate(messageOpts, observability)
 	if err != nil {
-		logger.Error("Slack message error: %s", err)
+		logger.Error("Slack notifier message error: %s", err)
 		return nil
 	}
 
@@ -166,7 +166,7 @@ func NewSlack(options SlackOptions, observability *common.Observability) *Slack 
 	}
 	runbooks, err := toolsRender.NewTextTemplate(runbooksOpts, observability)
 	if err != nil {
-		logger.Error("Slack runbooks error: %s", err)
+		logger.Error("Slack notifier runbooks error: %s", err)
 	}
 
 	r.client = vendors.NewSlack(options.SlackOptions)

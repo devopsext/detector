@@ -24,7 +24,7 @@ func (s *Logger) Name() string {
 func (s *Logger) Notify(vr *common.VerifyResult) error {
 
 	if vr.Endpoints.IsEmpty() {
-		return errors.New("Logger cannot process empty endpoints")
+		return errors.New("Logger notifier cannot process empty endpoints")
 	}
 
 	for _, e := range vr.Endpoints.Items() {
@@ -57,7 +57,7 @@ func (s *Logger) Notify(vr *common.VerifyResult) error {
 
 		avg := sum / float64(l)
 
-		s.logger.Info("Logger endpoint %s in countries %s %0.2f%%", uri, countries, avg)
+		s.logger.Info("Logger notifier endpoint %s in countries %s %0.2f%%", uri, countries, avg)
 	}
 	return nil
 }

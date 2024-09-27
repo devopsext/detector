@@ -18,7 +18,12 @@ type Detector interface {
 	Detect() error
 }
 
+type DetectorOptions struct {
+	StartTimeout int
+}
+
 type Detectors struct {
+	options   *DetectorOptions
 	scheduler *gocron.Scheduler
 	logger    sreCommon.Logger
 	items     []Detector
@@ -72,12 +77,15 @@ func (ds *Detectors) run(wg *sync.WaitGroup, once, wait bool, d Detector) {
 	}
 }
 
-func (ds *Detectors) Start(ctx context.Context, once, wait bool) {
+func (ds *Detectors) Start(once, wait bool, ctx context.Context) {
 
 	items := ds.items
 	if len(items) == 0 {
 		return
 	}
+
+	ctx, cancel := context.WithTimeout(ctx, time.Duration(ds.options.StartTimeout)*time.Second)
+	defer cancel()
 
 	wg := &sync.WaitGroup{}
 	for _, d := range ds.items {
@@ -87,6 +95,7 @@ func (ds *Detectors) Start(ctx context.Context, once, wait bool) {
 			d.Start(ctx)
 		}()
 	}
+	wg.Wait()
 
 	for _, d := range ds.items {
 		ds.run(wg, once, wait, d)
@@ -95,9 +104,10 @@ func (ds *Detectors) Start(ctx context.Context, once, wait bool) {
 	wg.Wait()
 }
 
-func NewDetectors(observability *Observability) *Detectors {
+func NewDetectors(options *DetectorOptions, observability *Observability) *Detectors {
 
 	return &Detectors{
+		options:   options,
 		scheduler: gocron.NewScheduler(time.UTC),
 		logger:    observability.Logs(),
 	}

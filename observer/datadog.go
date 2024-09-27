@@ -336,7 +336,12 @@ func (d *Datadog) buildQuery(sr *common.SourceResult, query, tagUri string) stri
 			continue
 		}
 
-		filter := fmt.Sprintf("%s:%s", tagUri, e.URI)
+		uri := common.NormalizeURI(e.URI)
+		if utils.IsEmpty(uri) {
+			continue
+		}
+
+		filter := fmt.Sprintf("%s:%s", tagUri, uri)
 
 		if !utils.IsEmpty(from) {
 			from = fmt.Sprintf("%s OR %s", from, filter)
@@ -351,16 +356,16 @@ func (d *Datadog) buildQuery(sr *common.SourceResult, query, tagUri string) stri
 func (d *Datadog) Observe(sr *common.SourceResult) (*common.ObserveResult, error) {
 
 	if sr.Endpoints.IsEmpty() {
-		return nil, errors.New("Datadog cannot process empty endpoints")
+		return nil, errors.New("Datadog observer cannot process empty endpoints")
 	}
 
-	d.logger.Debug("Datadog is observing...")
+	d.logger.Debug("Datadog observer is processing...")
 
 	var md DatadogMetricData
 
 	if utils.FileExists(d.options.File) {
 
-		d.logger.Debug("Datadog is loading data from %s", d.options.File)
+		d.logger.Debug("Datadog observer is loading data from %s", d.options.File)
 
 		t1 := time.Now()
 
@@ -370,18 +375,18 @@ func (d *Datadog) Observe(sr *common.SourceResult) (*common.ObserveResult, error
 		}
 		md = mf
 
-		d.logger.Debug("Datadog data was loaded in %s", time.Since(t1))
+		d.logger.Debug("Datadog observer spent %s", time.Since(t1))
 
 	} else if !utils.IsEmpty(d.options.Query) {
 
 		query := d.buildQuery(sr, d.options.Query, d.options.TagUri)
-		d.logger.Debug("Datadog is requesting data by query: %s", query)
+		d.logger.Debug("Datadog observer is requesting data by query: %s", query)
 
 		from, to, err := d.getFromTo(d.options.Duration)
 		if err != nil {
 			return nil, err
 		}
-		d.logger.Debug("Datadog interval %d <=> %d", from.UnixMilli(), to.UnixMilli())
+		d.logger.Debug("Datadog observer interval %d <=> %d", from.UnixMilli(), to.UnixMilli())
 
 		t1 := time.Now()
 
@@ -390,10 +395,10 @@ func (d *Datadog) Observe(sr *common.SourceResult) (*common.ObserveResult, error
 			return nil, err
 		}
 		md = mf
-		d.logger.Debug("Datadog data was loaded in %s", time.Since(t1))
+		d.logger.Debug("Datadog observer spent %s", time.Since(t1))
 	}
 
-	d.logger.Debug("Datadog metrics found: %d", len(md))
+	d.logger.Debug("Datadog observer metrics found: %d", len(md))
 	if len(md) == 0 {
 		return nil, nil
 	}
@@ -452,22 +457,22 @@ func NewDatadog(options *DatadogOptions, observability *common.Observability) *D
 	logger := observability.Logs()
 
 	if utils.IsEmpty(options.Site) {
-		logger.Debug("Datdog site is not defined. Skipped.")
+		logger.Debug("Datdog observer site is not defined. Skipped.")
 		return nil
 	}
 
 	if utils.IsEmpty(options.TagUri) || utils.IsEmpty(options.TagCountry) {
-		logger.Debug("Datdog tags are not defined. Skipped.")
+		logger.Debug("Datdog observer tags are not defined. Skipped.")
 		return nil
 	}
 
 	if utils.IsEmpty(options.Query) && utils.IsEmpty(options.File) {
-		logger.Debug("Datdog query or file are not defined. Skipped.")
+		logger.Debug("Datdog observer query or file are not defined. Skipped.")
 		return nil
 	}
 
 	if utils.IsEmpty(options.Duration) {
-		logger.Debug("Datdog duration is not defined. Skipped.")
+		logger.Debug("Datdog observer duration is not defined. Skipped.")
 		return nil
 	}
 

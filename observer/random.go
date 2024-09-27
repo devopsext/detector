@@ -29,10 +29,10 @@ func (rd *Random) Name() string {
 func (rd *Random) Observe(sr *common.SourceResult) (*common.ObserveResult, error) {
 
 	if sr.Endpoints.IsEmpty() {
-		return nil, errors.New("Random cannot process empty endpoints")
+		return nil, errors.New("Random observer cannot process empty endpoints")
 	}
 
-	rd.logger.Debug("Random is observing...")
+	rd.logger.Debug("Random observer is processing...")
 	t1 := time.Now()
 
 	es := common.ObserveEndpoints{}
@@ -68,7 +68,7 @@ func (rd *Random) Observe(sr *common.SourceResult) (*common.ObserveResult, error
 		es.Add(e)
 	}
 
-	rd.logger.Debug("Random data generated in %s", time.Since(t1))
+	rd.logger.Debug("Random observer spent %s", time.Since(t1))
 
 	r := &common.ObserveResult{
 		Endpoints: es,

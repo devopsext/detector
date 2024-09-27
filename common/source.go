@@ -41,6 +41,21 @@ type Sources struct {
 	items  []Source
 }
 
+func CheckSourceEndpoints(es []*SourceEndpoint) []*SourceEndpoint {
+
+	r := []*SourceEndpoint{}
+	for _, p := range es {
+		if p == nil {
+			continue
+		}
+		if utils.IsEmpty(p.URI) {
+			continue
+		}
+		r = append(r, p)
+	}
+	return r
+}
+
 // SourceEndpoints
 
 func (ses *SourceEndpoints) Clone(se *SourceEndpoint) *SourceEndpoint {

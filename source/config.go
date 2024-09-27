@@ -90,16 +90,16 @@ func (cs *Config) Start(ctx context.Context) error {
 
 func (cs *Config) Load() (*common.SourceResult, error) {
 
-	cs.logger.Debug("Config is loading...")
+	cs.logger.Debug("Config source is processing...")
 
 	t1 := time.Now()
 
 	config, err := cs.loadFile(cs.options.Path)
 	if err != nil {
-		return nil, fmt.Errorf("Config cannot read from file %s, error: %s", cs.options.Path, err)
+		return nil, fmt.Errorf("Config source cannot read from file %s, error: %s", cs.options.Path, err)
 	}
 
-	cs.logger.Debug("Config was loaded in %s", time.Since(t1))
+	cs.logger.Debug("Config source spent %s", time.Since(t1))
 
 	e := common.SourceEndpoints{}
 	e.Add(config.Endpoints...)
@@ -115,7 +115,7 @@ func NewConfig(options *ConfigOptions, observability *common.Observability) *Con
 
 	logger := observability.Logs()
 	if utils.IsEmpty(options.Path) {
-		logger.Debug("Config path is not defined. Skipped.")
+		logger.Debug("Config source path is not defined. Skipped.")
 		return nil
 	}
 
