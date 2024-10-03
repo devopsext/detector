@@ -16,9 +16,10 @@ require (
 	github.com/devopsext/tools v0.15.11
 	github.com/devopsext/utils v0.4.6
 	github.com/go-co-op/gocron v1.18.0
+	github.com/jellydator/ttlcache/v3 v3.3.0
 	github.com/jinzhu/copier v0.4.0
 	github.com/spf13/cobra v1.6.1
-	golang.org/x/sync v0.5.0
+	golang.org/x/sync v0.8.0
 	google.golang.org/api v0.30.0
 	gopkg.in/yaml.v2 v2.4.0
 )

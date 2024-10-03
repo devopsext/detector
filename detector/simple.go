@@ -15,6 +15,8 @@ import (
 type SimpleOptions struct {
 	Name                   string
 	Schedule               string
+	Countries              []string
+	Triggers               *common.Triggers
 	Sources                []common.Source
 	ObserverConfigurations []*common.ObserverConfiguration
 	VerifierConfigurations []*common.VerifierConfiguration
@@ -85,6 +87,18 @@ func (a *Simple) load() ([]*common.SourceResult, error) {
 				if e1 == nil {
 					continue
 				}
+
+				// need to change countries
+				if len(a.options.Countries) > 0 {
+					nc := []string{}
+					for _, c := range a.options.Countries {
+						if utils.Contains(e1.Countries, c) {
+							nc = append(nc, c)
+						}
+					}
+					e1.Countries = nc
+				}
+
 				r.Endpoints.Add(e1)
 			}
 			m.Store(s.Name(), r)
@@ -216,6 +230,57 @@ func (a *Simple) verify(or *common.ObserveResult) ([]*common.VerifyResult, error
 	return r, nil
 }
 
+func (a *Simple) TriggerKey(n common.Notifier, ep *common.VerifyEndpoint) string {
+
+	return fmt.Sprintf("%s: %s", n.Name(), ep.Ident())
+}
+
+func (a *Simple) FilterTriggers(n common.Notifier, vr *common.VerifyEndpoints) *common.VerifyEndpoints {
+
+	trs := a.options.Triggers
+	if trs == nil {
+		return vr
+	}
+
+	eps := &common.VerifyEndpoints{}
+	for _, ep := range vr.Items() {
+
+		if ep == nil {
+			continue
+		}
+
+		key := a.TriggerKey(n, ep)
+		if !trs.Exists(key) {
+			eps.Add(ep)
+		}
+	}
+
+	if eps.IsEmpty() {
+		return nil
+	}
+	return eps
+}
+
+func (a *Simple) UpdateTriggers(n common.Notifier, es *common.VerifyEndpoints) {
+
+	trs := a.options.Triggers
+	if trs == nil {
+		return
+	}
+
+	for _, ep := range es.Items() {
+
+		if ep == nil {
+			continue
+		}
+
+		key := a.TriggerKey(n, ep)
+		if !trs.Exists(key) {
+			trs.Update(key, ep)
+		}
+	}
+}
+
 func (a *Simple) notify(vr *common.VerifyResult) error {
 
 	items := a.options.NotifierConfigurations
@@ -264,14 +329,20 @@ func (a *Simple) notify(vr *common.VerifyResult) error {
 
 		g.Go(func() error {
 
+			nes := a.FilterTriggers(nc.Notifier, es)
+			if nes == nil || (nes != nil && len(nes.Items()) == 0) {
+				return nil
+			}
+
 			vrn := &common.VerifyResult{
-				Endpoints: *es,
+				Endpoints: *nes,
 			}
 
 			err := nc.Notifier.Notify(vrn)
 			if err != nil {
 				return err
 			}
+			a.UpdateTriggers(nc.Notifier, nes)
 			return nil
 		})
 	}

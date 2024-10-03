@@ -139,21 +139,27 @@ var notifierSlack = notifier.SlackOptions{
 	Runbooks: envFileContentExpand("NOTIFIER_SLACK_RUNBOOKS", ""),
 }
 
+var triggerOptions = common.TriggerOptions{
+	TTL: envGet("TRIGGER_TLL", "").(string),
+}
+
 var detectorOptions = common.DetectorOptions{
 	StartTimeout: envGet("START_TIMEOUT", 5).(int),
 }
 
 type DetectorSimpleOptions struct {
-	Schedules string
 	Sources   string
+	Schedules string
+	Countries string
 	Observers string
 	Verifiers string
 	Notifiers string
 }
 
 var detectorSimple = DetectorSimpleOptions{
-	Schedules: envGet("SIMPLE_SCHEDULES", "").(string),
 	Sources:   envGet("SIMPLE_SOURCES", "").(string),
+	Schedules: envGet("SIMPLE_SCHEDULES", "").(string),
+	Countries: envGet("SIMPLE_COUNTRIES", "").(string),
 	Observers: envGet("SIMPLE_OBSERVERS", "").(string),
 	Verifiers: envGet("SIMPLE_VERIFIERS", "").(string),
 	Notifiers: envGet("SIMPLE_NOTIFIERS", "").(string),
@@ -185,7 +191,8 @@ func envFileContentExpand(s string, def string) string {
 	return os.Expand(string(bytes), getOnlyEnv)
 }
 
-func getSimpleDetectors(obs *common.Observability, allSources *common.Sources, allObservers *common.Observers,
+func getSimpleDetectors(obs *common.Observability, triggers *common.Triggers,
+	allSources *common.Sources, allObservers *common.Observers,
 	allVerifiers *common.Verifiers, allNotifiers *common.Notifiers) []common.Detector {
 
 	r := []common.Detector{}
@@ -197,13 +204,6 @@ func getSimpleDetectors(obs *common.Observability, allSources *common.Sources, a
 
 		if utils.IsEmpty(k) || utils.IsEmpty(v) {
 			continue
-		}
-
-		// set schedule
-		schedule := "30s"
-		scheduleKVs := utils.MapGetKeyValues(detectorSimple.Schedules)
-		if !utils.IsEmpty(scheduleKVs[k]) {
-			schedule = scheduleKVs[k]
 		}
 
 		// find sources
@@ -225,6 +225,22 @@ func getSimpleDetectors(obs *common.Observability, allSources *common.Sources, a
 			sm = allSources.Items()
 		}
 
+		// set schedule
+		schedule := "30s"
+		scheduleKVs := utils.MapGetKeyValues(detectorSimple.Schedules)
+		if !utils.IsEmpty(scheduleKVs[k]) {
+			schedule = scheduleKVs[k]
+		}
+
+		// set countries
+		countriesCfg := ""
+		countriesKVs := utils.MapGetKeyValues(detectorSimple.Countries)
+		if !utils.IsEmpty(countriesKVs[k]) {
+			countriesCfg = countriesKVs[k]
+		}
+		countries := strings.Split(countriesCfg, ";")
+		countries = common.NormalizeCountries(countries)
+
 		// set observer configurations
 		observerCfg := ""
 		observerKVs := utils.MapGetKeyValues(detectorSimple.Observers)
@@ -233,8 +249,8 @@ func getSimpleDetectors(obs *common.Observability, allSources *common.Sources, a
 		}
 
 		// Detector1=Datadog:0.0;Observer:1.0
-		oc := allObservers.FindConfigurationByPattern(observerCfg)
-		if len(oc) == 0 {
+		observers := allObservers.FindConfigurationByPattern(observerCfg)
+		if len(observers) == 0 {
 			logger.Debug("Boot couldn't find observers for %s", observerCfg)
 			continue
 		}
@@ -247,8 +263,8 @@ func getSimpleDetectors(obs *common.Observability, allSources *common.Sources, a
 		}
 
 		// Detector=Site24x7:0.0
-		vc := allVerifiers.FindConfigurationByPattern(verifierCfg)
-		if len(vc) == 0 {
+		verifiers := allVerifiers.FindConfigurationByPattern(verifierCfg)
+		if len(verifiers) == 0 {
 			logger.Debug("Boot couldn't find verifiers for %s", verifierCfg)
 			continue
 		}
@@ -261,8 +277,8 @@ func getSimpleDetectors(obs *common.Observability, allSources *common.Sources, a
 		}
 
 		// Detector=Slack:0.0
-		nc := allNotifiers.FindConfigurationByPattern(notifierCfg)
-		if len(nc) == 0 {
+		notifiers := allNotifiers.FindConfigurationByPattern(notifierCfg)
+		if len(notifiers) == 0 {
 			logger.Debug("Boot couldn't find notifiers for %s", notifierCfg)
 			continue
 		}
@@ -270,10 +286,12 @@ func getSimpleDetectors(obs *common.Observability, allSources *common.Sources, a
 		opts := detector.SimpleOptions{
 			Name:                   k,
 			Schedule:               schedule,
+			Triggers:               triggers,
 			Sources:                sm,
-			ObserverConfigurations: oc,
-			VerifierConfigurations: vc,
-			NotifierConfigurations: nc,
+			Countries:              countries,
+			ObserverConfigurations: observers,
+			VerifierConfigurations: verifiers,
+			NotifierConfigurations: notifiers,
 		}
 
 		d := detector.NewSimple(&opts, obs)
@@ -326,6 +344,8 @@ func Execute() {
 			obs := common.NewObservability(logs, metrics)
 			ctx := context.Background()
 
+			triggers := common.NewTriggers(&triggerOptions, obs)
+
 			sources := common.NewSources(obs)
 			sources.Add(source.NewConfig(&sourceConfig, obs))
 			sources.Add(source.NewPubSub(&sourcePubSub, obs, ctx))
@@ -344,12 +364,9 @@ func Execute() {
 			notifiers.Add(notifier.NewSlack(notifierSlack, obs))
 
 			detectors := common.NewDetectors(&detectorOptions, obs)
-			detectors.Add(getSimpleDetectors(obs, sources, observers, verifiers, notifiers)...)
+			detectors.Add(getSimpleDetectors(obs, triggers, sources, observers, verifiers, notifiers)...)
 
 			detectors.Start(rootOptions.RunOnce, rootOptions.SchedulerWait, ctx)
-
-			// notifier cache needed (with TTL) ... send to Slack if there is no in cache
-			// process only certain countries, endpoints???
 
 			// start wait if there are some jobs
 			if detectors.Scheduled() {
@@ -426,6 +443,8 @@ func Execute() {
 
 	flags.StringVar(&verifierHttp.URL, "verifier-http-url", verifierHttp.URL, "Verfifier http url")
 
+	flags.StringVar(&triggerOptions.TTL, "trigger-ttl", triggerOptions.TTL, "Trigger default TTL")
+
 	flags.IntVar(&notifierSlack.SlackOptions.Timeout, "notifier-slack-timeout", notifierSlack.SlackOptions.Timeout, "Notifier slack timeout")
 	flags.BoolVar(&notifierSlack.SlackOptions.Insecure, "notifier-slack-insecure", notifierSlack.SlackOptions.Insecure, "Notifier slack insecure")
 	flags.StringVar(&notifierSlack.SlackOptions.Token, "notifier-slack-token", notifierSlack.SlackOptions.Token, "Notifier slack token")
@@ -433,8 +452,9 @@ func Execute() {
 	flags.StringVar(&notifierSlack.Message, "notifier-slack-message", notifierSlack.Message, "Notifier slack message")
 	flags.StringVar(&notifierSlack.Runbooks, "notifier-slack-runbooks", notifierSlack.Runbooks, "Notifier slack runbooks")
 
-	flags.StringVar(&detectorSimple.Schedules, "detector-simple-schedules", detectorSimple.Schedules, "Detector simple schedules")
 	flags.StringVar(&detectorSimple.Sources, "detector-simple-sources", detectorSimple.Sources, "Detector simple sources")
+	flags.StringVar(&detectorSimple.Schedules, "detector-simple-schedules", detectorSimple.Schedules, "Detector simple schedules")
+	flags.StringVar(&detectorSimple.Countries, "detector-simple-countries", detectorSimple.Countries, "Detector simple countries")
 	flags.StringVar(&detectorSimple.Observers, "detector-simple-observers", detectorSimple.Observers, "Detector simple observers")
 	flags.StringVar(&detectorSimple.Verifiers, "detector-simple-verifiers", detectorSimple.Verifiers, "Detector simple verifiers")
 	flags.StringVar(&detectorSimple.Notifiers, "detector-simple-notifiers", detectorSimple.Notifiers, "Detector simple notifiers")

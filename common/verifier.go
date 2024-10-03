@@ -1,6 +1,7 @@
 package common
 
 import (
+	"fmt"
 	"maps"
 	"slices"
 	"strconv"
@@ -54,6 +55,20 @@ type Verifier interface {
 type Verifiers struct {
 	logger sreCommon.Logger
 	items  []Verifier
+}
+
+// VerifyEndpoint
+
+func (ve *VerifyEndpoint) Ident() string {
+
+	countries := ""
+	keys := slices.Collect(maps.Keys(ve.Countries))
+	if len(keys) > 0 {
+		slices.Sort(keys)
+		countries = fmt.Sprintf(" [%s]", strings.Join(keys, ","))
+	}
+
+	return fmt.Sprintf("%s%s", ve.URI, countries)
 }
 
 // VerifyEndpoints
