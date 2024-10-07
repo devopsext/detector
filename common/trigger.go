@@ -28,26 +28,25 @@ func (t *Triggers) Update(key string, ep *VerifyEndpoint) {
 	if ep == nil {
 		return
 	}
-
-	// if there is no entry create it
-	if !t.cache.Has(key) {
-		t.cache.Set(key, ep, ttlcache.PreviousOrDefaultTTL)
-		return
-	}
+	t.cache.Set(key, ep, ttlcache.PreviousOrDefaultTTL)
 }
 
 func NewTriggers(options *TriggerOptions, observability *Observability) *Triggers {
 
-	logger := observability.Logs()
-
-	opts := []ttlcache.Option[string, *VerifyEndpoint]{}
-	if options != nil && !utils.IsEmpty(options.TTL) {
-
-		ttl, err := time.ParseDuration(options.TTL)
-		if err == nil {
-			opts = append(opts, ttlcache.WithTTL[string, *VerifyEndpoint](ttl))
-		}
+	if options == nil {
+		return nil
 	}
+
+	logger := observability.Logs()
+	opts := []ttlcache.Option[string, *VerifyEndpoint]{}
+
+	ttl := 1 * 60 * 60 * time.Second
+
+	if !utils.IsEmpty(options.TTL) {
+		ttl, _ = time.ParseDuration(options.TTL)
+	}
+
+	opts = append(opts, ttlcache.WithTTL[string, *VerifyEndpoint](ttl))
 
 	cache := ttlcache.New[string, *VerifyEndpoint](opts...)
 	go cache.Start()

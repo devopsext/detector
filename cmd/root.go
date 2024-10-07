@@ -140,7 +140,7 @@ var notifierSlack = notifier.SlackOptions{
 }
 
 var triggerOptions = common.TriggerOptions{
-	TTL: envGet("TRIGGER_TLL", "").(string),
+	TTL: envGet("TRIGGER_TTL", "").(string),
 }
 
 var detectorOptions = common.DetectorOptions{
@@ -318,8 +318,8 @@ func interceptSyscall() {
 func Execute() {
 
 	rootCmd := &cobra.Command{
-		Use:   "discovery",
-		Short: "Discovery",
+		Use:   "detector",
+		Short: "Detector",
 		PersistentPreRun: func(cmd *cobra.Command, args []string) {
 
 			stdoutOptions.Version = version

@@ -84,15 +84,19 @@ func (ds *Detectors) Start(once, wait bool, ctx context.Context) {
 		return
 	}
 
-	ctx, cancel := context.WithTimeout(ctx, time.Duration(ds.options.StartTimeout)*time.Second)
+	nctx := ctx
+	x, cancel := context.WithTimeout(ctx, time.Duration(ds.options.StartTimeout)*time.Second)
 	defer cancel()
+	if x != nil {
+		nctx = x
+	}
 
 	wg := &sync.WaitGroup{}
 	for _, d := range ds.items {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			d.Start(ctx)
+			d.Start(nctx)
 		}()
 	}
 	wg.Wait()

@@ -330,7 +330,7 @@ func (a *Simple) notify(vr *common.VerifyResult) error {
 		g.Go(func() error {
 
 			nes := a.FilterTriggers(nc.Notifier, es)
-			if nes == nil || (nes != nil && len(nes.Items()) == 0) {
+			if nes == nil || len(nes.Items()) == 0 {
 				return nil
 			}
 
@@ -507,12 +507,7 @@ func (a *Simple) Start(ctx context.Context) {
 	}
 }
 
-func (a *Simple) Detect() error {
-
-	if !a.lock.TryLock() {
-		return fmt.Errorf("Simple %s detector already in a loop", a.options.Name)
-	}
-	defer a.lock.Unlock()
+func (a *Simple) tryLoad() (*common.SourceResult, error) {
 
 	a.logger.Debug("Simple %s detector is loading...", a.options.Name)
 	t1 := time.Now()
@@ -520,13 +515,13 @@ func (a *Simple) Detect() error {
 	srs, err := a.load()
 	if err != nil {
 		a.logger.Debug("Simple %s detector cannot load from sources, error: %s", a.options.Name, err)
+		return nil, err
 	}
 	a.logger.Debug("Simple %s detector sources were loaded in %s", a.options.Name, time.Since(t1))
 
 	sr := a.mergeSourceResults(srs)
 	if sr == nil {
-		a.logger.Debug("Simple %s detector has no source results", a.options.Name)
-		return nil
+		return nil, nil
 	}
 
 	for _, ep := range sr.Endpoints.Items() {
@@ -535,6 +530,10 @@ func (a *Simple) Detect() error {
 		}
 		a.logger.Debug("Simple %s detector source endpoint %s %s", a.options.Name, ep.URI, ep.Countries)
 	}
+	return sr, nil
+}
+
+func (a *Simple) tryObserve(sr *common.SourceResult) (*common.ObserveResult, error) {
 
 	a.logger.Debug("Simple %s detector is observing...", a.options.Name)
 	t2 := time.Now()
@@ -542,13 +541,13 @@ func (a *Simple) Detect() error {
 	ors, err := a.observe(sr)
 	if err != nil {
 		a.logger.Error("Simple %s detector cannot observe, error: %s", a.options.Name, err)
+		return nil, err
 	}
 	a.logger.Debug("Simple %s detector observed in %s", a.options.Name, time.Since(t2))
 
 	or := a.mergeObserveResults(ors)
 	if or == nil {
-		a.logger.Debug("Simple %s detector has no observe results", a.options.Name)
-		return nil
+		return nil, nil
 	}
 
 	for _, ep := range or.Endpoints.Items() {
@@ -561,6 +560,10 @@ func (a *Simple) Detect() error {
 		}
 		a.logger.Debug("Simple %s detector observed endpoint %s %s", a.options.Name, ep.URI, arr)
 	}
+	return or, nil
+}
+
+func (a *Simple) tryVerify(or *common.ObserveResult) (*common.VerifyResult, error) {
 
 	a.logger.Debug("Simple %s detector is verifying...", a.options.Name)
 	t3 := time.Now()
@@ -568,13 +571,13 @@ func (a *Simple) Detect() error {
 	vrs, err := a.verify(or)
 	if err != nil {
 		a.logger.Error("Simple %s detector cannot verify, error: %s", a.options.Name, err)
+		return nil, err
 	}
 	a.logger.Debug("Simple %s detector verified in %s", a.options.Name, time.Since(t3))
 
 	vr := a.mergeVerifyResults(vrs)
 	if vr == nil {
-		a.logger.Debug("Simple %s detector has no verify results", a.options.Name)
-		return nil
+		return nil, nil
 	}
 
 	for _, ep := range vr.Endpoints.Items() {
@@ -600,16 +603,52 @@ func (a *Simple) Detect() error {
 		}
 		a.logger.Debug("Simple %s detector verified endpoint %s %s", a.options.Name, ep.URI, arr)
 	}
+	return vr, nil
+}
+
+func (a *Simple) tryNotify(vr *common.VerifyResult) error {
 
 	a.logger.Debug("Simple %s detector is notifying...", a.options.Name)
 	t4 := time.Now()
 
-	err = a.notify(vr)
+	err := a.notify(vr)
 	if err != nil {
 		a.logger.Error("Simple %s detector cannot notify, error: %s", a.options.Name, err)
+		return err
 	}
 	a.logger.Debug("Simple %s detector notified in %s", a.options.Name, time.Since(t4))
+	return nil
+}
 
+func (a *Simple) Detect() error {
+
+	if !a.lock.TryLock() {
+		return fmt.Errorf("Simple %s detector already in a loop", a.options.Name)
+	}
+	defer a.lock.Unlock()
+
+	sr, _ := a.tryLoad()
+	if sr == nil {
+		a.logger.Debug("Simple %s detector has no source results", a.options.Name)
+		return nil
+	}
+
+	or, _ := a.tryObserve(sr)
+	if or == nil {
+		a.logger.Debug("Simple %s detector has no observe results", a.options.Name)
+		return nil
+	}
+
+	vr, _ := a.tryVerify(or)
+	if vr == nil {
+		a.logger.Debug("Simple %s detector has no verify results", a.options.Name)
+		return nil
+	}
+
+	err := a.tryNotify(vr)
+	if err != nil {
+		return err
+	}
 	return nil
 }
 

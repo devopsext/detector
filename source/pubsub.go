@@ -145,12 +145,6 @@ func (ps *PubSub) Start(ctx context.Context) error {
 
 	err = sub.Receive(ctx, func(rctx context.Context, msg *pubsub.Message) {
 
-		_, ok := ctx.Deadline()
-		if ok {
-			msg.Nack()
-			return
-		}
-
 		var pm discovery.PubSubMessage
 		err := json.Unmarshal(msg.Data, &pm)
 		if err != nil {
@@ -214,7 +208,7 @@ func (ps *PubSub) Start(ctx context.Context) error {
 					}
 					es = common.CheckSourceEndpoints(es)
 					if len(es) == 0 {
-						return
+						continue
 					}
 					path := ps.replace(f.Path)
 					m[path] = es
