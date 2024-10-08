@@ -5,8 +5,7 @@ go 1.23
 replace gopkg.in/DataDog/dd-trace-go.v1 => github.com/devopsext/dd-trace-go v1.31.2
 
 //replace github.com/devopsext/utils => ../utils/
-
-replace github.com/devopsext/tools => ../tools/
+//replace github.com/devopsext/tools => ../tools/
 
 require (
 	cloud.google.com/go/pubsub v1.3.1
