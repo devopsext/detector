@@ -122,6 +122,25 @@ var verifierSite24x7 = verifier.Site24x7Options{
 	LogReportFile:         envGet("VERIFIER_SITE24X7_LOG_REPORT_FILE", "").(string),
 }
 
+var verifierCatchpoint = verifier.CatchpointOptions{
+	CatchpointOptions: vendors.CatchpointOptions{
+		Timeout:  envGet("VERIFIER_CATCHPOINT_TIMEOUT", 30).(int),
+		Insecure: envGet("VERIFIER_CATCHPOINT_INSECURE", false).(bool),
+		APIToken: envGet("VERIFIER_CATCHPOINT_API_TOKEN", "").(string),
+		Retries:  envGet("VERIFIER_CATCHPOINT_HTTP_RETRIES", 5).(int),
+	},
+	CatchpointSearchNodesWithOptions: vendors.CatchpointSearchNodesWithOptions{
+		PageSize:   envGet("VERIFIER_CATCHPOINT_SEARCH_PAGE_SIZE", 5).(int),
+		PageNumber: envGet("VERIFIER_CATCHPOINT_SEARCH_PAGE_NUMBER", 1).(int),
+	},
+	PollTimeout:        envGet("VERIFIER_CATCHPOINT_POLL_TIMEOUT", 160).(int),
+	PollDelay:          envGet("VERIFIER_CATCHPOINT_POLL_DELAY", 5).(int),
+	InstantTestType:    envGet("VERIFIER_CATCHPOINT_INSTANT_TEST_TYPE", 0).(int),
+	HTTPMethodType:     envGet("VERIFIER_CATCHPOINT_HTTP_METHOD_TYPE", 0).(int),
+	MonitorType:        envGet("VERIFIER_CATCHPOINT_MONITOR_TYPE", 2).(int),
+	ResponseReportFile: envGet("VERIFIER_CATCHPOINT_RESPONSE_REPORT_FILE", "").(string),
+}
+
 var verifierHttp = verifier.HttpOptions{
 	URL: envGet("VERIFIER_HTTP_URL", "").(string),
 }
@@ -357,6 +376,7 @@ func Execute() {
 			verifiers := common.NewVerifiers(obs)
 			verifiers.Add(verifier.NewRandom(&verifierRandom, obs))
 			verifiers.Add(verifier.NewSite24x7(&verifierSite24x7, obs))
+			verifiers.Add(verifier.NewCatchpoint(&verifierCatchpoint, obs))
 			verifiers.Add(verifier.NewHttp(&verifierHttp, obs))
 
 			notifiers := common.NewNotifiers(obs)
@@ -440,6 +460,20 @@ func Execute() {
 	flags.IntVar(&verifierSite24x7.PollTimeout, "verifier-site24x7-poll-timeout", verifierSite24x7.PollTimeout, "Verifier site24x7 poll timeout in seconds")
 	flags.IntVar(&verifierSite24x7.PollDelay, "verifier-site24x7-poll-delay", verifierSite24x7.PollDelay, "Verifier site24x7 poll delay in milliseconds")
 	flags.StringVar(&verifierSite24x7.LogReportFile, "verifier-site24x7-log-report-id", verifierSite24x7.LogReportFile, "Verifier site24x7log report file")
+
+	flags.StringVar(&verifierCatchpoint.APIToken, "verifier-catchpoint-api-token", verifierCatchpoint.APIToken, "Verifier catchpoint api token")
+	flags.IntVar(&verifierCatchpoint.Timeout, "verifier-catchpoint-timeout", verifierCatchpoint.Timeout, "Verifier catchpoint timeout in seconds")
+	flags.BoolVar(&verifierCatchpoint.Insecure, "verifier-catchpoint-insecure", verifierCatchpoint.Insecure, "Verifier catchpoint insecure")
+	flags.IntVar(&verifierCatchpoint.PollTimeout, "verifier-catchpoint-poll-timeout", verifierCatchpoint.PollTimeout, "Verifier catchpoint poll timeout in seconds")
+	flags.IntVar(&verifierCatchpoint.PollDelay, "verifier-catchpoint-poll-delay", verifierCatchpoint.PollDelay, "Verifier catchpoint poll delay in milliseconds")
+	flags.IntVar(&verifierCatchpoint.InstantTestType, "verifier-catchpoint-instant-test-type", verifierCatchpoint.InstantTestType, "Verifier catchpoint instant test type")
+	flags.IntVar(&verifierCatchpoint.HTTPMethodType, "verifier-catchpoint-http-method-type", verifierCatchpoint.HTTPMethodType, "Verifier catchpoint http method type")
+	flags.IntVar(&verifierCatchpoint.MonitorType, "verifier-catchpoint-monitor-type", verifierCatchpoint.MonitorType, "Verifier catchpoint monitor type")
+	flags.IntVar(&verifierCatchpoint.CatchpointSearchNodesWithOptions.PageSize, "verifier-catchpoint-search-page-size", verifierCatchpoint.CatchpointSearchNodesWithOptions.PageSize, "Verifier catchpoint search page size")
+	flags.IntVar(&verifierCatchpoint.CatchpointSearchNodesWithOptions.PageNumber, "verifier-catchpoint-search-page-number", verifierCatchpoint.CatchpointSearchNodesWithOptions.PageNumber, "Verifier catchpoint search page number")
+	flags.IntVar(&verifierCatchpoint.Retries, "verivier-catchpoint-http-retries", verifierCatchpoint.Retries, "Verifier catchpoint http retries count")
+
+	flags.StringVar(&verifierCatchpoint.ResponseReportFile, "verifier-catchpoint-response-report-file", verifierCatchpoint.ResponseReportFile, "Verifier catchpoint response report file")
 
 	flags.StringVar(&verifierHttp.URL, "verifier-http-url", verifierHttp.URL, "Verfifier http url")
 
