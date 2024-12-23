@@ -12,8 +12,8 @@ require (
 	github.com/DataDog/datadog-api-client-go/v2 v2.30.0
 	github.com/devopsext/discovery v0.14.7
 	github.com/devopsext/sre v0.6.2
-	github.com/devopsext/tools v0.15.11
-	github.com/devopsext/utils v0.4.6
+	github.com/devopsext/tools v0.15.16-0.20241212114135-71806518bfff
+	github.com/devopsext/utils v0.4.7-0.20241212114052-eda7f1a1a2c2
 	github.com/go-co-op/gocron v1.18.0
 	github.com/jellydator/ttlcache/v3 v3.3.0
 	github.com/jinzhu/copier v0.4.0
