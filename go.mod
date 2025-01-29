@@ -4,16 +4,13 @@ go 1.23
 
 replace gopkg.in/DataDog/dd-trace-go.v1 => github.com/devopsext/dd-trace-go v1.31.2
 
-//replace github.com/devopsext/utils => ../utils/
-//replace github.com/devopsext/tools => ../tools/
-
 require (
 	cloud.google.com/go/pubsub v1.3.1
 	github.com/DataDog/datadog-api-client-go/v2 v2.30.0
-	github.com/devopsext/discovery v0.14.7
+	github.com/devopsext/discovery v0.13.7
 	github.com/devopsext/sre v0.6.2
-	github.com/devopsext/tools v0.15.16-0.20241212114135-71806518bfff
-	github.com/devopsext/utils v0.4.7-0.20241212114052-eda7f1a1a2c2
+	github.com/devopsext/tools v0.15.17
+	github.com/devopsext/utils v0.4.7
 	github.com/go-co-op/gocron v1.18.0
 	github.com/jellydator/ttlcache/v3 v3.3.0
 	github.com/jinzhu/copier v0.4.0
@@ -25,6 +22,7 @@ require (
 
 require (
 	cloud.google.com/go v0.62.0 // indirect
+	github.com/Azure/go-ntlmssp v0.0.0-20221128193559-754e69321358 // indirect
 	github.com/BurntSushi/toml v0.3.1 // indirect
 	github.com/DataDog/datadog-api-client-go v1.7.0 // indirect
 	github.com/DataDog/datadog-go v4.7.0+incompatible // indirect
@@ -35,14 +33,18 @@ require (
 	github.com/Masterminds/sprig/v3 v3.2.2 // indirect
 	github.com/Microsoft/go-winio v0.5.0 // indirect
 	github.com/VictoriaMetrics/metrics v1.33.1 // indirect
+	github.com/allegro/bigcache v1.2.1 // indirect
 	github.com/araddon/dateparse v0.0.0-20210429162001-6b43995a97de // indirect
 	github.com/blues/jsonata-go v1.5.4 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/emicklei/go-restful/v3 v3.11.0 // indirect
+	github.com/go-asn1-ber/asn1-ber v1.5.5 // indirect
+	github.com/go-ldap/ldap/v3 v3.4.8 // indirect
 	github.com/go-logr/logr v1.3.0 // indirect
 	github.com/go-openapi/jsonpointer v0.19.6 // indirect
 	github.com/go-openapi/jsonreference v0.20.2 // indirect
 	github.com/go-openapi/swag v0.22.3 // indirect
+	github.com/go-playground/form/v4 v4.2.1 // indirect
 	github.com/goccy/go-json v0.10.2 // indirect
 	github.com/gogo/protobuf v1.3.2 // indirect
 	github.com/golang/groupcache v0.0.0-20210331224755-41bb18bfe9da // indirect
@@ -50,11 +52,13 @@ require (
 	github.com/google/gnostic-models v0.6.8 // indirect
 	github.com/google/go-cmp v0.6.0 // indirect
 	github.com/google/gofuzz v1.2.0 // indirect
-	github.com/google/uuid v1.5.0 // indirect
+	github.com/google/uuid v1.6.0 // indirect
 	github.com/googleapis/gax-go/v2 v2.0.5 // indirect
 	github.com/huandu/xstrings v1.3.1 // indirect
 	github.com/imdario/mergo v0.3.11 // indirect
 	github.com/inconshreveable/mousetrap v1.0.1 // indirect
+	github.com/itchyny/gojq v0.12.16 // indirect
+	github.com/itchyny/timefmt-go v0.1.6 // indirect
 	github.com/josharian/intern v1.0.0 // indirect
 	github.com/json-iterator/go v1.1.12 // indirect
 	github.com/jstemmer/go-junit-report v0.9.1 // indirect
@@ -84,13 +88,13 @@ require (
 	github.com/valyala/histogram v1.2.0 // indirect
 	go.opencensus.io v0.22.4 // indirect
 	go.uber.org/atomic v1.7.0 // indirect
-	golang.org/x/crypto v0.16.0 // indirect
+	golang.org/x/crypto v0.21.0 // indirect
 	golang.org/x/lint v0.0.0-20200302205851-738671d3881b // indirect
 	golang.org/x/mod v0.14.0 // indirect
-	golang.org/x/net v0.19.0 // indirect
+	golang.org/x/net v0.22.0 // indirect
 	golang.org/x/oauth2 v0.10.0 // indirect
 	golang.org/x/sys v0.20.0 // indirect
-	golang.org/x/term v0.15.0 // indirect
+	golang.org/x/term v0.18.0 // indirect
 	golang.org/x/text v0.14.0 // indirect
 	golang.org/x/time v0.3.0 // indirect
 	golang.org/x/tools v0.16.1 // indirect

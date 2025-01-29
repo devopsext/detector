@@ -9,6 +9,13 @@ type Observability struct {
 	metrics *sre.Metrics
 }
 
+// Panic implements common.Logger.
+func (o *Observability) Panic(obj interface{}, args ...interface{}) {
+	if o.logs != nil {
+		o.logs.Panic(obj, args...)
+	}
+}
+
 func (o *Observability) Info(obj interface{}, args ...interface{}) {
 	if o.logs != nil {
 		o.logs.Info(obj, args...)
