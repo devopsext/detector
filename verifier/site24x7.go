@@ -446,10 +446,10 @@ func (s *Site24x7) processLogReportSummary(oe *common.ObserveEndpoint, locations
 	for k, v := range m {
 
 		flags := make(common.VerifyStatusFlags)
-		sum := float64(0.0)
+		sum := float64(100.0)
 
 		for _, sm := range v {
-			sum = sum + sm.availability
+			sum = sum - sm.availability
 
 			for k, v := range sm.flags {
 				if v {
