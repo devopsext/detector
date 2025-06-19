@@ -3,6 +3,7 @@ package notifier
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"reflect"
 	"strings"
 	"time"
@@ -19,6 +20,7 @@ type SlackOptions struct {
 	Channel  string
 	Message  string
 	Runbooks string
+	Offset   time.Duration
 }
 
 type Slack struct {
@@ -128,6 +130,52 @@ func (s *Slack) fIndirect(obj interface{}) interface{} {
 	return v2.Interface()
 }
 
+func (s *Slack) fGetConversationHistory() *vendors.GetConversationHistoryResponse {
+	if s.client == nil {
+		return nil
+	}
+	off := s.options.Offset
+	if off == 0 {
+		off = 1 // Default to 1 hour if not specified
+	}
+	offset := time.Now().Add(-time.Hour * off).Unix() // 1 hour ago
+
+	params := vendors.GetConversationHistoryParameters{
+		ChannelID: s.options.Channel,
+		Limit:     100, // Slack recommends 100 as a reasonable page size
+		Oldest:    fmt.Sprintf("%d", offset),
+		Inclusive: true, // Include messages at the oldest timestamp
+	}
+
+	allMessages := &vendors.GetConversationHistoryResponse{}
+	cursor := ""
+	for {
+		params.Cursor = cursor
+		history, err := s.client.GetConversationHistory(params)
+		if err != nil {
+			s.logger.Error("Slack notifier get conversation history error: %s", err)
+			break
+		}
+		h := &vendors.GetConversationHistoryResponse{}
+		err = json.Unmarshal(history, h)
+		if err != nil {
+			s.logger.Error("Slack notifier get conversation history unmarshal error: %s", err)
+			break
+		}
+
+		// Append messages to allMessages
+		allMessages.Messages = append(allMessages.Messages, h.Messages...)
+
+		// Check for next cursor
+		if h.ResponseMetadata.NextCursor == "" {
+			break
+		}
+		cursor = h.ResponseMetadata.NextCursor
+	}
+
+	return allMessages
+}
+
 func NewSlack(options SlackOptions, observability *common.Observability) *Slack {
 
 	logger := observability.Logs()
@@ -149,6 +197,7 @@ func NewSlack(options SlackOptions, observability *common.Observability) *Slack 
 
 	funcs := make(map[string]any)
 	funcs["indirect"] = r.fIndirect
+	funcs["getConversationHistory"] = r.fGetConversationHistory
 
 	messageOpts := toolsRender.TemplateOptions{
 		Content: options.Message,
