@@ -46,6 +46,7 @@ type Catchpoint struct {
 	logger  sreCommon.Logger
 	options *CatchpointOptions
 	client  *vendors.Catchpoint
+	metrics *common.VerifierMetrics
 }
 
 const CatchpointVerifierName = "Catchpoint"
@@ -213,9 +214,25 @@ func (c *Catchpoint) getLogReport(token string, testID int, nodes []*vendors.Nod
 }
 
 func (c *Catchpoint) verifyHttp(oe *common.ObserveEndpoint, token, scheme string, countries []string) (*[]vendors.CatchpointInstantTestResultReponse, error) {
+	// Record test start in metrics for each country
+	if c.metrics != nil {
+		domain := common.ExtractDomain(oe.URI)
+		for _, country := range countries {
+			normalizedCountry := common.NormalizeCountryForMetrics(country)
+			c.metrics.RecordTestStart(c.Name(), domain, normalizedCountry)
+		}
+	}
 
 	u, err := url.Parse(oe.URI)
 	if err != nil {
+		// Record error parsing URL in metrics
+		if c.metrics != nil {
+			domain := common.ExtractDomain(oe.URI)
+			for _, country := range countries {
+				normalizedCountry := common.NormalizeCountryForMetrics(country)
+				c.metrics.RecordTestError(c.Name(), domain, normalizedCountry, "url_parse_error", 0)
+			}
+		}
 		return nil, err
 	}
 
@@ -281,10 +298,26 @@ func (c *Catchpoint) verifyHttp(oe *common.ObserveEndpoint, token, scheme string
 	}
 
 	if lerr != nil {
+		// Record error in metrics
+		if c.metrics != nil {
+			domain := common.ExtractDomain(oe.URI)
+			for _, country := range countries {
+				normalizedCountry := common.NormalizeCountryForMetrics(country)
+				c.metrics.RecordTestError(c.Name(), domain, normalizedCountry, "log_report_error", 0)
+			}
+		}
 		return nil, lerr
 	}
 
 	if lrr == nil {
+		// Record error in metrics
+		if c.metrics != nil {
+			domain := common.ExtractDomain(oe.URI)
+			for _, country := range countries {
+				normalizedCountry := common.NormalizeCountryForMetrics(country)
+				c.metrics.RecordTestError(c.Name(), domain, normalizedCountry, "empty_result", 0)
+			}
+		}
 		return nil, nil
 	}
 
@@ -292,6 +325,8 @@ func (c *Catchpoint) verifyHttp(oe *common.ObserveEndpoint, token, scheme string
 }
 
 func (c *Catchpoint) processInstantTestResultSummary(oe *common.ObserveEndpoint, results *[]vendors.CatchpointInstantTestResultReponse) (*[]CatchpointSummary, error) {
+
+	c.logger.Debug("Catchpoint verifier. processInstantTestResultSummary. Processing %d results for endpoint %s", len(*results), oe.URI)
 
 	var rs []CatchpointSummary
 
@@ -323,6 +358,7 @@ func (c *Catchpoint) processInstantTestResultSummary(oe *common.ObserveEndpoint,
 		var Availability *float64
 		var avbIndex int
 		country := toolsCommon.CountryShort(r.Data.InstantTestRecord.Node.Country.Name)
+		c.logger.Debug("Catchpoint verifier. processInstantTestResultSummary. Processing result for country %s, node %s", country, r.Data.InstantTestRecord.Node.Name)
 		sm := m[country]
 		if sm == nil {
 			sm = []summary{}
@@ -402,6 +438,26 @@ func (c *Catchpoint) processInstantTestResultSummary(oe *common.ObserveEndpoint,
 			Flags:   flags,
 		})
 	}
+
+	// Record result in metrics one time for each unique country
+	if c.metrics != nil {
+		domain := common.ExtractDomain(oe.URI)
+		c.logger.Debug("Catchpoint verifier. processInstantTestResultSummary. Recording metrics for %d unique countries", len(m))
+		for k := range m {
+			normalizedCountry := common.NormalizeCountryForMetrics(k)
+
+			// Calculate average probability for country
+			v := m[k]
+			sum := float64(100.0)
+			for _, sm := range v {
+				sum = sum - sm.availability
+			}
+			avg := sum / float64(len(v))
+
+			c.logger.Debug("Catchpoint verifier. processInstantTestResultSummary. Recording result for country %s with %d nodes, avg probability %f", k, len(v), avg)
+			c.metrics.RecordTestResult(c.Name(), domain, normalizedCountry, avg, 0)
+		}
+	}
 	return &rs, nil
 }
 
@@ -440,6 +496,16 @@ func (c *Catchpoint) Verify(or *common.ObserveResult) (*common.VerifyResult, err
 			case common.URISchemeHttp, common.URISchemeHttps:
 
 				rr, err = c.verifyHttp(oe, token, scheme, countries)
+				if err != nil {
+					// Record error in metrics
+					if c.metrics != nil {
+						domain := common.ExtractDomain(oe.URI)
+						for _, country := range countries {
+							normalizedCountry := common.NormalizeCountryForMetrics(country)
+							c.metrics.RecordTestError(c.Name(), domain, normalizedCountry, "verify_http_error", 0)
+						}
+					}
+				}
 			default:
 				return fmt.Errorf("Catchpoint verifier has no support for %s endpoint %s in countries %s", scheme, uri, countries)
 			}
@@ -514,5 +580,6 @@ func NewCatchpoint(options *CatchpointOptions, observability *common.Observabili
 		options: options,
 		logger:  logger,
 		client:  vendors.NewCatchpoint(options.CatchpointOptions, observability),
+		metrics: common.NewVerifierMetrics(observability.Metrics()),
 	}
 }

@@ -18,6 +18,7 @@ type RandomOptions struct {
 type Random struct {
 	logger  sreCommon.Logger
 	options *RandomOptions
+	metrics *common.VerifierMetrics
 }
 
 const RandomVerifierName = "Random"
@@ -59,6 +60,12 @@ func (rd *Random) Verify(or *common.ObserveResult) (*common.VerifyResult, error)
 			}
 			country := common.NormalizeCountry(k)
 			countries[country] = status
+
+			if rd.metrics != nil {
+				domain := common.ExtractDomain(e.URI)
+				normalizedCountry := common.NormalizeCountryForMetrics(k)
+				rd.metrics.RecordTestResult(rd.Name(), domain, normalizedCountry, value, 0)
+			}
 		}
 
 		if len(countries) == 0 {
@@ -89,5 +96,6 @@ func NewRandom(options *RandomOptions, observability *common.Observability) *Ran
 	return &Random{
 		options: options,
 		logger:  logger,
+		metrics: common.NewVerifierMetrics(observability.Metrics()),
 	}
 }
