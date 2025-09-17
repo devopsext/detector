@@ -145,6 +145,19 @@ var verifierHttp = verifier.HttpOptions{
 	URL: envGet("VERIFIER_HTTP_URL", "").(string),
 }
 
+var verifierQATests = verifier.QATestsOptions{
+	URL:              envGet("VERIFIER_QATESTS_URL", "").(string),
+	Timeout:          envGet("VERIFIER_QATESTS_TIMEOUT", 400).(int), // Больше чем TestTimeout + буфер
+	Insecure:         envGet("VERIFIER_QATESTS_INSECURE", false).(bool),
+	BusinessProcess:  envGet("VERIFIER_QATESTS_BUSINESS_PROCESS", "").(string),
+	AllureProjectId:  envGet("VERIFIER_QATESTS_ALLURE_PROJECT_ID", "").(string),
+	AllureLaunchName: envGet("VERIFIER_QATESTS_ALLURE_LAUNCH_NAME", "").(string),
+	Priority:         envGet("VERIFIER_QATESTS_PRIORITY", 1).(int),
+	SecsBoundary:     envGet("VERIFIER_QATESTS_SECS_BOUNDARY", 0).(int),
+	TestTimeout:      envGet("VERIFIER_QATESTS_TEST_TIMEOUT", 360).(int),
+	TestRetries:      envGet("VERIFIER_QATESTS_TEST_RETRIES", 0).(int),
+}
+
 var notifierLogger = notifier.LoggerOptions{}
 
 var notifierSlack = notifier.SlackOptions{
@@ -378,6 +391,7 @@ func Execute() {
 			verifiers.Add(verifier.NewSite24x7(&verifierSite24x7, obs))
 			verifiers.Add(verifier.NewCatchpoint(&verifierCatchpoint, obs))
 			verifiers.Add(verifier.NewHttp(&verifierHttp, obs))
+			verifiers.Add(verifier.NewQATests(&verifierQATests, obs))
 
 			notifiers := common.NewNotifiers(obs)
 			notifiers.Add(notifier.NewLogger(notifierLogger, obs))

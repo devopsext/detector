@@ -47,6 +47,7 @@ type Site24x7 struct {
 	logger  sreCommon.Logger
 	options *Site24x7Options
 	client  *vendors.Site24x7
+	metrics *common.VerifierMetrics
 }
 
 const Site24x7VerifierName = "Site24x7"
@@ -246,9 +247,25 @@ func (s *Site24x7) getLogReport(token, ID string) (*vendors.Site24x7LogReportRep
 }
 
 func (s *Site24x7) verifyHttp(oe *common.ObserveEndpoint, token, scheme string, countries []string) (*vendors.Site24x7LogReportData, error) {
+	// Record test start in metrics for each country
+	if s.metrics != nil {
+		domain := common.ExtractDomain(oe.URI)
+		for _, country := range countries {
+			normalizedCountry := common.NormalizeCountryForMetrics(country)
+			s.metrics.RecordTestStart(s.Name(), domain, normalizedCountry)
+		}
+	}
 
 	u, err := url.Parse(oe.URI)
 	if err != nil {
+		// Record error parsing URL in metrics
+		if s.metrics != nil {
+			domain := common.ExtractDomain(oe.URI)
+			for _, country := range countries {
+				normalizedCountry := common.NormalizeCountryForMetrics(country)
+				s.metrics.RecordTestError(s.Name(), domain, normalizedCountry, "url_parse_error", 0)
+			}
+		}
 		return nil, err
 	}
 
@@ -297,10 +314,26 @@ func (s *Site24x7) verifyHttp(oe *common.ObserveEndpoint, token, scheme string, 
 	}
 
 	if lerr != nil {
+		// Record error in metrics
+		if s.metrics != nil {
+			domain := common.ExtractDomain(oe.URI)
+			for _, country := range countries {
+				normalizedCountry := common.NormalizeCountryForMetrics(country)
+				s.metrics.RecordTestError(s.Name(), domain, normalizedCountry, "log_report_error", 0)
+			}
+		}
 		return nil, lerr
 	}
 
 	if lrr == nil || lrr.Data == nil {
+		// Record error in metrics
+		if s.metrics != nil {
+			domain := common.ExtractDomain(oe.URI)
+			for _, country := range countries {
+				normalizedCountry := common.NormalizeCountryForMetrics(country)
+				s.metrics.RecordTestError(s.Name(), domain, normalizedCountry, "empty_result", 0)
+			}
+		}
 		return nil, nil
 	}
 
@@ -358,8 +391,12 @@ func (s *Site24x7) findCountryByLocation(ltd *vendors.Site24x7LocationTemplateDa
 		if l.LocationID != locationID {
 			continue
 		}
-
-		short := tools.CountryShort(l.CountryName)
+		var short string
+		if l.CountryName == "Viet Nam" {
+			short = "VN"
+		} else {
+			short = tools.CountryShort(l.CountryName)
+		}
 		if !utils.IsEmpty(short) {
 			return short
 		}
@@ -446,10 +483,10 @@ func (s *Site24x7) processLogReportSummary(oe *common.ObserveEndpoint, locations
 	for k, v := range m {
 
 		flags := make(common.VerifyStatusFlags)
-		sum := float64(100.0)
+		sum := float64(0.0)
 
 		for _, sm := range v {
-			sum = sum - sm.availability
+			sum = sum + sm.availability
 
 			for k, v := range sm.flags {
 				if v {
@@ -459,12 +496,19 @@ func (s *Site24x7) processLogReportSummary(oe *common.ObserveEndpoint, locations
 		}
 
 		avg := sum / float64(len(v))
-
+		probability := float64(100.0) - avg
 		r = append(r, &Site24x7Summary{
 			Country: k,
-			Avg:     avg,
+			Avg:     probability,
 			Flags:   flags,
 		})
+
+		// Record result in metrics
+		if s.metrics != nil {
+			domain := common.ExtractDomain(oe.URI)
+			normalizedCountry := common.NormalizeCountryForMetrics(k)
+			s.metrics.RecordTestResult(s.Name(), domain, normalizedCountry, probability, 0)
+		}
 	}
 	return r
 }
@@ -520,6 +564,17 @@ func (s *Site24x7) Verify(or *common.ObserveResult) (*common.VerifyResult, error
 				case common.URISchemeHttp, common.URISchemeHttps:
 
 					rd, err = s.verifyHttp(oe, token, scheme, countries)
+					if err != nil {
+						// Record error in metrics
+						if s.metrics != nil {
+							domain := common.ExtractDomain(oe.URI)
+							for _, country := range countries {
+								normalizedCountry := common.NormalizeCountryForMetrics(country)
+								s.metrics.RecordTestError(s.Name(), domain, normalizedCountry, "verify_http_error", 0)
+							}
+						}
+					}
+
 				default:
 					return fmt.Errorf("Site24x7 verifier has no support for %s endpoint %s in countries %s", scheme, uri, countries)
 				}
@@ -599,5 +654,6 @@ func NewSite24x7(options *Site24x7Options, observability *common.Observability) 
 		options: options,
 		logger:  logger,
 		client:  vendors.NewSite24x7(options.Site24x7Options, observability),
+		metrics: common.NewVerifierMetrics(observability.Metrics()),
 	}
 }
