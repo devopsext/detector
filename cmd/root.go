@@ -376,6 +376,9 @@ func Execute() {
 			obs := common.NewObservability(logs, metrics)
 			ctx := context.Background()
 
+			// Create verifier metrics for observers and verifiers
+			verifierMetrics := common.NewVerifierMetrics(metrics)
+
 			triggers := common.NewTriggers(&triggerOptions, obs)
 
 			sources := common.NewSources(obs)
@@ -384,7 +387,7 @@ func Execute() {
 
 			observers := common.NewObservers(obs)
 			observers.Add(observer.NewRandom(&observerRandom, obs))
-			observers.Add(observer.NewDatadog(&observerDatadog, obs))
+			observers.Add(observer.NewDatadog(&observerDatadog, obs, verifierMetrics))
 
 			verifiers := common.NewVerifiers(obs)
 			verifiers.Add(verifier.NewRandom(&verifierRandom, obs))
@@ -395,7 +398,7 @@ func Execute() {
 
 			notifiers := common.NewNotifiers(obs)
 			notifiers.Add(notifier.NewLogger(notifierLogger, obs))
-			notifiers.Add(notifier.NewSlack(notifierSlack, obs))
+			notifiers.Add(notifier.NewSlack(notifierSlack, obs, verifierMetrics))
 
 			detectors := common.NewDetectors(&detectorOptions, obs)
 			detectors.Add(getSimpleDetectors(obs, triggers, sources, observers, verifiers, notifiers)...)
