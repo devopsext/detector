@@ -38,7 +38,7 @@ func (vm *VerifierMetrics) RecordTestStart(verifier, domain, country string) {
 	// Create a metric with specific labels
 	counter := vm.metrics.Counter(
 		"verifier",
-		"detector_tests_total",
+		"tests_total",
 		"Total number of verifier tests executed",
 		sreCommon.Labels{
 			"verifier": verifier,
@@ -46,6 +46,32 @@ func (vm *VerifierMetrics) RecordTestStart(verifier, domain, country string) {
 			"country":  country,
 			"status":   "started",
 		},
+	)
+	counter.Inc()
+}
+
+// RecordTestStartByType records the start of the test with component type
+func (vm *VerifierMetrics) RecordTestStartByType(componentType, componentName, domain, country string) {
+	if vm == nil || vm.metrics == nil {
+		return
+	}
+
+	vm.mutex.RLock()
+	defer vm.mutex.RUnlock()
+
+	// Create a metric with component type as label name
+	labels := sreCommon.Labels{
+		"domain":  domain,
+		"country": country,
+		"status":  "started",
+	}
+	labels[componentType] = componentName
+
+	counter := vm.metrics.Counter(
+		componentType,
+		"tests_total",
+		"Total number of tests executed",
+		labels,
 	)
 	counter.Inc()
 }
@@ -62,7 +88,7 @@ func (vm *VerifierMetrics) RecordTestSuccess(verifier, domain, country string, d
 	// Create a metric for successful tests
 	successCounter := vm.metrics.Counter(
 		"verifier",
-		"detector_tests_success",
+		"tests_success",
 		"Number of successful verifier tests",
 		sreCommon.Labels{
 			"verifier": verifier,
@@ -75,7 +101,7 @@ func (vm *VerifierMetrics) RecordTestSuccess(verifier, domain, country string, d
 	// Create a metric for the total number of tests
 	totalCounter := vm.metrics.Counter(
 		"verifier",
-		"detector_tests_total",
+		"tests_total",
 		"Total number of verifier tests executed",
 		sreCommon.Labels{
 			"verifier": verifier,
@@ -83,6 +109,47 @@ func (vm *VerifierMetrics) RecordTestSuccess(verifier, domain, country string, d
 			"country":  country,
 			"status":   "success",
 		},
+	)
+	totalCounter.Inc()
+}
+
+// RecordTestSuccessByType records the successful execution with component type
+func (vm *VerifierMetrics) RecordTestSuccessByType(componentType, componentName, domain, country string, duration float64) {
+	if vm == nil || vm.metrics == nil {
+		return
+	}
+
+	vm.mutex.RLock()
+	defer vm.mutex.RUnlock()
+
+	// Create a metric for successful tests
+	labels := sreCommon.Labels{
+		"domain":  domain,
+		"country": country,
+	}
+	labels[componentType] = componentName
+
+	successCounter := vm.metrics.Counter(
+		componentType,
+		"tests_success",
+		"Number of successful tests",
+		labels,
+	)
+	successCounter.Inc()
+
+	// Create a metric for the total number of tests
+	totalLabels := sreCommon.Labels{
+		"domain":  domain,
+		"country": country,
+		"status":  "success",
+	}
+	totalLabels[componentType] = componentName
+
+	totalCounter := vm.metrics.Counter(
+		componentType,
+		"tests_total",
+		"Total number of tests executed",
+		totalLabels,
 	)
 	totalCounter.Inc()
 }
@@ -99,7 +166,7 @@ func (vm *VerifierMetrics) RecordTestError(verifier, domain, country, errorType 
 	// Create a metric for errors
 	errorCounter := vm.metrics.Counter(
 		"verifier",
-		"detector_tests_error",
+		"tests_error",
 		"Number of failed verifier tests",
 		sreCommon.Labels{
 			"verifier":   verifier,
@@ -113,7 +180,7 @@ func (vm *VerifierMetrics) RecordTestError(verifier, domain, country, errorType 
 	// Create a metric for the total number of tests
 	totalCounter := vm.metrics.Counter(
 		"verifier",
-		"detector_tests_total",
+		"tests_total",
 		"Total number of verifier tests executed",
 		sreCommon.Labels{
 			"verifier": verifier,
@@ -121,6 +188,48 @@ func (vm *VerifierMetrics) RecordTestError(verifier, domain, country, errorType 
 			"country":  country,
 			"status":   "error",
 		},
+	)
+	totalCounter.Inc()
+}
+
+// RecordTestErrorByType records the error with component type
+func (vm *VerifierMetrics) RecordTestErrorByType(componentType, componentName, domain, country, errorType string, duration float64) {
+	if vm == nil || vm.metrics == nil {
+		return
+	}
+
+	vm.mutex.RLock()
+	defer vm.mutex.RUnlock()
+
+	// Create a metric for errors
+	labels := sreCommon.Labels{
+		"domain":     domain,
+		"country":    country,
+		"error_type": errorType,
+	}
+	labels[componentType] = componentName
+
+	errorCounter := vm.metrics.Counter(
+		componentType,
+		"tests_error",
+		"Number of failed tests",
+		labels,
+	)
+	errorCounter.Inc()
+
+	// Create a metric for the total number of tests
+	totalLabels := sreCommon.Labels{
+		"domain":  domain,
+		"country": country,
+		"status":  "error",
+	}
+	totalLabels[componentType] = componentName
+
+	totalCounter := vm.metrics.Counter(
+		componentType,
+		"tests_total",
+		"Total number of tests executed",
+		totalLabels,
 	)
 	totalCounter.Inc()
 }
@@ -143,7 +252,7 @@ func (vm *VerifierMetrics) RecordTestResult(verifier, domain, country string, pr
 	// Create a metric for the total number of tests
 	totalCounter := vm.metrics.Counter(
 		"verifier",
-		"detector_tests_total",
+		"tests_total",
 		"Total number of verifier tests executed",
 		sreCommon.Labels{
 			"verifier": verifier,
@@ -158,7 +267,7 @@ func (vm *VerifierMetrics) RecordTestResult(verifier, domain, country string, pr
 	if probability == 0 {
 		successCounter := vm.metrics.Counter(
 			"verifier",
-			"detector_tests_success",
+			"tests_success",
 			"Number of successful verifier tests",
 			sreCommon.Labels{
 				"verifier": verifier,
@@ -170,7 +279,7 @@ func (vm *VerifierMetrics) RecordTestResult(verifier, domain, country string, pr
 	} else {
 		errorCounter := vm.metrics.Counter(
 			"verifier",
-			"detector_tests_error",
+			"tests_error",
 			"Number of failed verifier tests",
 			sreCommon.Labels{
 				"verifier":   verifier,
@@ -185,7 +294,7 @@ func (vm *VerifierMetrics) RecordTestResult(verifier, domain, country string, pr
 	// Record the current probability in gauge
 	probabilityGauge := vm.metrics.Gauge(
 		"verifier",
-		"detector_tests_probability",
+		"tests_probability",
 		"Current probability of problems detected",
 		sreCommon.Labels{
 			"verifier": verifier,

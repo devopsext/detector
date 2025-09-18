@@ -483,10 +483,17 @@ func (s *Site24x7) processLogReportSummary(oe *common.ObserveEndpoint, locations
 	for k, v := range m {
 
 		flags := make(common.VerifyStatusFlags)
-		sum := float64(0.0)
+
+		successfulNodes := 0
+		failedNodes := 0
 
 		for _, sm := range v {
-			sum = sum + sm.availability
+
+			if sm.availability == 100.0 {
+				successfulNodes++
+			} else if sm.availability == 0.0 {
+				failedNodes++
+			}
 
 			for k, v := range sm.flags {
 				if v {
@@ -495,8 +502,14 @@ func (s *Site24x7) processLogReportSummary(oe *common.ObserveEndpoint, locations
 			}
 		}
 
-		avg := sum / float64(len(v))
-		probability := float64(100.0) - avg
+		var probability float64
+		nodesWithResults := successfulNodes + failedNodes
+		if nodesWithResults > 0 {
+			probability = (float64(failedNodes) / float64(nodesWithResults)) * 100.0
+		} else {
+			probability = 100.0
+		}
+
 		r = append(r, &Site24x7Summary{
 			Country: k,
 			Avg:     probability,

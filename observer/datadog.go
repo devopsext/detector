@@ -47,6 +47,7 @@ type Datadog struct {
 	apiV1   *datadogV1.MetricsApi
 	apiV2   *datadogV2.MetricsApi
 	ctx     context.Context
+	metrics *common.VerifierMetrics
 }
 
 const ObserverDatadogName = "Datadog"
@@ -361,6 +362,19 @@ func (d *Datadog) Observe(sr *common.SourceResult) (*common.ObserveResult, error
 
 	d.logger.Debug("Datadog observer is processing...")
 
+	// Record observer start in metrics
+	if d.metrics != nil {
+		for _, endpoint := range sr.Endpoints.Items() {
+			if endpoint != nil {
+				domain := common.ExtractDomain(endpoint.URI)
+				for _, country := range endpoint.Countries {
+					normalizedCountry := common.NormalizeCountryForMetrics(country)
+					d.metrics.RecordTestStartByType("observer", "datadog", domain, normalizedCountry)
+				}
+			}
+		}
+	}
+
 	var md DatadogMetricData
 
 	if utils.FileExists(d.options.File) {
@@ -417,10 +431,10 @@ func (d *Datadog) Observe(sr *common.SourceResult) (*common.ObserveResult, error
 		sum := float64(0.0)
 		countries := make(common.ObserveCountries)
 
-		for _, c := range e.Countries {
+		for _, country := range e.Countries {
 
-			country := common.NormalizeCountry(c)
-			sm := d.firstURIbyCountry(md, uri, country)
+			normalizedCountry := common.NormalizeCountry(country)
+			sm := d.firstURIbyCountry(md, uri, normalizedCountry)
 
 			if sm == nil {
 				countries[country] = nil
@@ -449,10 +463,30 @@ func (d *Datadog) Observe(sr *common.SourceResult) (*common.ObserveResult, error
 	r := &common.ObserveResult{
 		Endpoints: es,
 	}
+
+	// Record degradation results in metrics
+	if d.metrics != nil {
+		for _, endpoint := range es.Items() {
+			if endpoint != nil {
+				domain := common.ExtractDomain(endpoint.URI)
+				for country, degradation := range endpoint.Countries {
+					normalizedCountry := common.NormalizeCountryForMetrics(country)
+					if degradation == nil {
+						// Degradation found - record as error
+						d.metrics.RecordTestErrorByType("observer", "datadog", domain, normalizedCountry, "no_results_found", 0)
+					} else {
+						// No degradation found - record as success
+						d.metrics.RecordTestSuccessByType("observer", "datadog", domain, normalizedCountry, 0)
+					}
+				}
+			}
+		}
+	}
+
 	return r, nil
 }
 
-func NewDatadog(options *DatadogOptions, observability *common.Observability) *Datadog {
+func NewDatadog(options *DatadogOptions, observability *common.Observability, metrics *common.VerifierMetrics) *Datadog {
 
 	logger := observability.Logs()
 
@@ -519,5 +553,6 @@ func NewDatadog(options *DatadogOptions, observability *common.Observability) *D
 		apiV1:   apiV1,
 		apiV2:   apiV2,
 		ctx:     ctx,
+		metrics: metrics,
 	}
 }

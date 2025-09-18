@@ -29,6 +29,7 @@ type Slack struct {
 	client   *vendors.Slack
 	message  *toolsRender.TextTemplate
 	runbooks *toolsRender.TextTemplate
+	metrics  *common.VerifierMetrics
 }
 
 const NotifierSlackName = "Slack"
@@ -86,10 +87,35 @@ func (s *Slack) Notify(vr *common.VerifyResult) error {
 
 	s.logger.Debug("Slack notifier is processing...")
 
+	// Record notification start in metrics
+	if s.metrics != nil {
+		for _, endpoint := range vr.Endpoints.Items() {
+			if endpoint != nil {
+				domain := common.ExtractDomain(endpoint.URI)
+				for country := range endpoint.Countries {
+					normalizedCountry := common.NormalizeCountryForMetrics(country)
+					s.metrics.RecordTestStartByType("notifier", "slack", domain, normalizedCountry)
+				}
+			}
+		}
+	}
+
 	t1 := time.Now()
 
 	d, err := s.renderTemplate(s.message, vr)
 	if err != nil {
+		// Record template rendering error in metrics
+		if s.metrics != nil {
+			for _, endpoint := range vr.Endpoints.Items() {
+				if endpoint != nil {
+					domain := common.ExtractDomain(endpoint.URI)
+					for country := range endpoint.Countries {
+						normalizedCountry := common.NormalizeCountryForMetrics(country)
+						s.metrics.RecordTestErrorByType("notifier", "slack", domain, normalizedCountry, "template_rendering_error", 0)
+					}
+				}
+			}
+		}
 		return err
 	}
 
@@ -104,18 +130,67 @@ func (s *Slack) Notify(vr *common.VerifyResult) error {
 	}
 	r, err := s.client.SendMessage(opts)
 	if err != nil {
+		// Record message sending error in metrics
+		if s.metrics != nil {
+			for _, endpoint := range vr.Endpoints.Items() {
+				if endpoint != nil {
+					domain := common.ExtractDomain(endpoint.URI)
+					for country := range endpoint.Countries {
+						normalizedCountry := common.NormalizeCountryForMetrics(country)
+						s.metrics.RecordTestErrorByType("notifier", "slack", domain, normalizedCountry, "message_sending_error", 0)
+					}
+				}
+			}
+		}
 		return err
 	}
 
 	mr := vendors.SlackMessageResponse{}
 	err = json.Unmarshal(r, &mr)
 	if err != nil {
+		// Record JSON unmarshal error in metrics
+		if s.metrics != nil {
+			for _, endpoint := range vr.Endpoints.Items() {
+				if endpoint != nil {
+					domain := common.ExtractDomain(endpoint.URI)
+					for country := range endpoint.Countries {
+						normalizedCountry := common.NormalizeCountryForMetrics(country)
+						s.metrics.RecordTestErrorByType("notifier", "slack", domain, normalizedCountry, "json_unmarshal_error", 0)
+					}
+				}
+			}
+		}
 		return err
 	}
 
 	err = s.execute(&mr, vr)
 	if err != nil {
 		s.message.LogError(err)
+		// Record execution error in metrics
+		if s.metrics != nil {
+			for _, endpoint := range vr.Endpoints.Items() {
+				if endpoint != nil {
+					domain := common.ExtractDomain(endpoint.URI)
+					for country := range endpoint.Countries {
+						normalizedCountry := common.NormalizeCountryForMetrics(country)
+						s.metrics.RecordTestErrorByType("notifier", "slack", domain, normalizedCountry, "execution_error", 0)
+					}
+				}
+			}
+		}
+	}
+
+	// Record successful notification in metrics
+	if s.metrics != nil {
+		for _, endpoint := range vr.Endpoints.Items() {
+			if endpoint != nil {
+				domain := common.ExtractDomain(endpoint.URI)
+				for country := range endpoint.Countries {
+					normalizedCountry := common.NormalizeCountryForMetrics(country)
+					s.metrics.RecordTestSuccessByType("notifier", "slack", domain, normalizedCountry, float64(time.Since(t1).Seconds()))
+				}
+			}
+		}
 	}
 
 	s.logger.Debug("Slack notifier spent %s", time.Since(t1))
@@ -176,7 +251,7 @@ func (s *Slack) fGetConversationHistory() *vendors.GetConversationHistoryRespons
 	return allMessages
 }
 
-func NewSlack(options SlackOptions, observability *common.Observability) *Slack {
+func NewSlack(options SlackOptions, observability *common.Observability, metrics *common.VerifierMetrics) *Slack {
 
 	logger := observability.Logs()
 
@@ -193,6 +268,7 @@ func NewSlack(options SlackOptions, observability *common.Observability) *Slack 
 	r := &Slack{
 		options: options,
 		logger:  logger,
+		metrics: metrics,
 	}
 
 	funcs := make(map[string]any)
