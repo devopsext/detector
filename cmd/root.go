@@ -152,10 +152,20 @@ var verifierQATests = verifier.QATestsOptions{
 	BusinessProcess:  envGet("VERIFIER_QATESTS_BUSINESS_PROCESS", "").(string),
 	AllureProjectId:  envGet("VERIFIER_QATESTS_ALLURE_PROJECT_ID", "").(string),
 	AllureLaunchName: envGet("VERIFIER_QATESTS_ALLURE_LAUNCH_NAME", "").(string),
-	Priority:         envGet("VERIFIER_QATESTS_PRIORITY", 1).(int),
-	SecsBoundary:     envGet("VERIFIER_QATESTS_SECS_BOUNDARY", 0).(int),
-	TestTimeout:      envGet("VERIFIER_QATESTS_TEST_TIMEOUT", 360).(int),
-	TestRetries:      envGet("VERIFIER_QATESTS_TEST_RETRIES", 0).(int),
+	AllureLaunchTags: func() []string {
+		tags := strings.Split(envGet("VERIFIER_QATESTS_ALLURE_LAUNCH_TAGS", "").(string), ",")
+		var result []string
+		for _, tag := range tags {
+			if trimmed := strings.TrimSpace(tag); trimmed != "" {
+				result = append(result, trimmed)
+			}
+		}
+		return result
+	}(),
+	Priority:     envGet("VERIFIER_QATESTS_PRIORITY", 1).(int),
+	SecsBoundary: envGet("VERIFIER_QATESTS_SECS_BOUNDARY", 0).(int),
+	TestTimeout:  envGet("VERIFIER_QATESTS_TEST_TIMEOUT", 360).(int),
+	TestRetries:  envGet("VERIFIER_QATESTS_TEST_RETRIES", 0).(int),
 }
 
 var notifierLogger = notifier.LoggerOptions{}
@@ -394,7 +404,7 @@ func Execute() {
 			verifiers.Add(verifier.NewSite24x7(&verifierSite24x7, obs))
 			verifiers.Add(verifier.NewCatchpoint(&verifierCatchpoint, obs))
 			verifiers.Add(verifier.NewHttp(&verifierHttp, obs))
-			verifiers.Add(verifier.NewQATests(&verifierQATests, obs))
+			verifiers.Add(verifier.NewQATests(&verifierQATests, obs, verifierMetrics))
 
 			notifiers := common.NewNotifiers(obs)
 			notifiers.Add(notifier.NewLogger(notifierLogger, obs))

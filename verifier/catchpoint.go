@@ -219,7 +219,7 @@ func (c *Catchpoint) verifyHttp(oe *common.ObserveEndpoint, token, scheme string
 		domain := common.ExtractDomain(oe.URI)
 		for _, country := range countries {
 			normalizedCountry := common.NormalizeCountryForMetrics(country)
-			c.metrics.RecordTestStart(c.Name(), domain, normalizedCountry)
+			c.metrics.RecordTestStartByType("verifier", c.Name(), domain, normalizedCountry)
 		}
 	}
 
@@ -230,7 +230,7 @@ func (c *Catchpoint) verifyHttp(oe *common.ObserveEndpoint, token, scheme string
 			domain := common.ExtractDomain(oe.URI)
 			for _, country := range countries {
 				normalizedCountry := common.NormalizeCountryForMetrics(country)
-				c.metrics.RecordTestError(c.Name(), domain, normalizedCountry, "url_parse_error", 0)
+				c.metrics.RecordTestErrorByType("verifier", c.Name(), domain, normalizedCountry, "url_parse_error", 0)
 			}
 		}
 		return nil, err
@@ -259,6 +259,11 @@ func (c *Catchpoint) verifyHttp(oe *common.ObserveEndpoint, token, scheme string
 		nodesOpts.Country = country
 		d, err = c.searchNodesWithOptions(opts, nodesOpts)
 		if err != nil {
+			domain := common.ExtractDomain(oe.URI)
+			for _, country := range countries {
+				normalizedCountry := common.NormalizeCountryForMetrics(country)
+				c.metrics.RecordTestErrorByType("verifier", c.Name(), domain, normalizedCountry, "search_nodes_error", 0)
+			}
 			return nil, err
 		}
 		for _, n := range *d.Data.Nodes {
@@ -276,6 +281,11 @@ func (c *Catchpoint) verifyHttp(oe *common.ObserveEndpoint, token, scheme string
 	c.logger.Debug("Catchpoint verifier is creating InstantTest for endpoint %s in countries %s...", oe.URI, countries)
 	wmr, err := c.createIstantTest(token, murl, nodes)
 	if err != nil {
+		domain := common.ExtractDomain(oe.URI)
+		for _, country := range countries {
+			normalizedCountry := common.NormalizeCountryForMetrics(country)
+			c.metrics.RecordTestErrorByType("verifier", c.Name(), domain, normalizedCountry, "create_instant_test_error", 0)
+		}
 		return nil, err
 	}
 
@@ -303,7 +313,7 @@ func (c *Catchpoint) verifyHttp(oe *common.ObserveEndpoint, token, scheme string
 			domain := common.ExtractDomain(oe.URI)
 			for _, country := range countries {
 				normalizedCountry := common.NormalizeCountryForMetrics(country)
-				c.metrics.RecordTestError(c.Name(), domain, normalizedCountry, "log_report_error", 0)
+				c.metrics.RecordTestErrorByType("verifier", c.Name(), domain, normalizedCountry, "log_report_error", 0)
 			}
 		}
 		return nil, lerr
@@ -315,11 +325,13 @@ func (c *Catchpoint) verifyHttp(oe *common.ObserveEndpoint, token, scheme string
 			domain := common.ExtractDomain(oe.URI)
 			for _, country := range countries {
 				normalizedCountry := common.NormalizeCountryForMetrics(country)
-				c.metrics.RecordTestError(c.Name(), domain, normalizedCountry, "empty_result", 0)
+				c.metrics.RecordTestErrorByType("verifier", c.Name(), domain, normalizedCountry, "empty_result", 0)
 			}
 		}
 		return nil, nil
 	}
+
+	// HTTP request successful - metrics will be recorded in RecordTestResult
 
 	return lrr, nil
 }
@@ -493,14 +505,7 @@ func (c *Catchpoint) Verify(or *common.ObserveResult) (*common.VerifyResult, err
 
 				rr, err = c.verifyHttp(oe, token, scheme, countries)
 				if err != nil {
-					// Record error in metrics
-					if c.metrics != nil {
-						domain := common.ExtractDomain(oe.URI)
-						for _, country := range countries {
-							normalizedCountry := common.NormalizeCountryForMetrics(country)
-							c.metrics.RecordTestError(c.Name(), domain, normalizedCountry, "verify_http_error", 0)
-						}
-					}
+					return err
 				}
 			default:
 				return fmt.Errorf("Catchpoint verifier has no support for %s endpoint %s in countries %s", scheme, uri, countries)
@@ -539,6 +544,7 @@ func (c *Catchpoint) Verify(or *common.ObserveResult) (*common.VerifyResult, err
 				if c.metrics != nil {
 					domain := common.ExtractDomain(oe.URI)
 					normalizedCountry := common.NormalizeCountryForMetrics(r.Country)
+					c.logger.Debug("Catchpoint verifier. RecordTestResult metrics. Recording probability for %s - %s - %0.2f", c.Name(), normalizedCountry, r.Avg)
 					c.metrics.RecordTestResult(c.Name(), domain, normalizedCountry, r.Avg, 0)
 				}
 			}

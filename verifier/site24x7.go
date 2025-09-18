@@ -252,7 +252,7 @@ func (s *Site24x7) verifyHttp(oe *common.ObserveEndpoint, token, scheme string, 
 		domain := common.ExtractDomain(oe.URI)
 		for _, country := range countries {
 			normalizedCountry := common.NormalizeCountryForMetrics(country)
-			s.metrics.RecordTestStart(s.Name(), domain, normalizedCountry)
+			s.metrics.RecordTestStartByType("verifier", s.Name(), domain, normalizedCountry)
 		}
 	}
 
@@ -263,7 +263,7 @@ func (s *Site24x7) verifyHttp(oe *common.ObserveEndpoint, token, scheme string, 
 			domain := common.ExtractDomain(oe.URI)
 			for _, country := range countries {
 				normalizedCountry := common.NormalizeCountryForMetrics(country)
-				s.metrics.RecordTestError(s.Name(), domain, normalizedCountry, "url_parse_error", 0)
+				s.metrics.RecordTestErrorByType("verifier", s.Name(), domain, normalizedCountry, "url_parse_error", 0)
 			}
 		}
 		return nil, err
@@ -280,12 +280,22 @@ func (s *Site24x7) verifyHttp(oe *common.ObserveEndpoint, token, scheme string, 
 	s.logger.Debug("Site24x7 verifier is creating monitor %s for endpoint %s in countries %s...", name, oe.URI, countries)
 	wmr, err := s.createWebsiteMonitor(token, name, murl, countries)
 	if err != nil {
+		domain := common.ExtractDomain(oe.URI)
+		for _, country := range countries {
+			normalizedCountry := common.NormalizeCountryForMetrics(country)
+			s.metrics.RecordTestErrorByType("verifier", s.Name(), domain, normalizedCountry, "create_website_monitor_error", 0)
+		}
 		return nil, err
 	}
 
 	s.logger.Debug("Site24x7 verifier is polling now monitor %s...", wmr.Data.DisplayName)
 	_, err = s.pollNow(token, wmr.Data.MonitorID)
 	if err != nil {
+		domain := common.ExtractDomain(oe.URI)
+		for _, country := range countries {
+			normalizedCountry := common.NormalizeCountryForMetrics(country)
+			s.metrics.RecordTestErrorByType("verifier", s.Name(), domain, normalizedCountry, "poll_now_error", 0)
+		}
 		return nil, err
 	}
 
@@ -319,7 +329,7 @@ func (s *Site24x7) verifyHttp(oe *common.ObserveEndpoint, token, scheme string, 
 			domain := common.ExtractDomain(oe.URI)
 			for _, country := range countries {
 				normalizedCountry := common.NormalizeCountryForMetrics(country)
-				s.metrics.RecordTestError(s.Name(), domain, normalizedCountry, "log_report_error", 0)
+				s.metrics.RecordTestErrorByType("verifier", s.Name(), domain, normalizedCountry, "log_report_error", 0)
 			}
 		}
 		return nil, lerr
@@ -331,11 +341,13 @@ func (s *Site24x7) verifyHttp(oe *common.ObserveEndpoint, token, scheme string, 
 			domain := common.ExtractDomain(oe.URI)
 			for _, country := range countries {
 				normalizedCountry := common.NormalizeCountryForMetrics(country)
-				s.metrics.RecordTestError(s.Name(), domain, normalizedCountry, "empty_result", 0)
+				s.metrics.RecordTestErrorByType("verifier", s.Name(), domain, normalizedCountry, "empty_result", 0)
 			}
 		}
 		return nil, nil
 	}
+
+	// HTTP request successful - metrics will be recorded in RecordTestResult
 
 	return lrr.Data, nil
 }
@@ -597,7 +609,7 @@ func (s *Site24x7) Verify(or *common.ObserveResult) (*common.VerifyResult, error
 							domain := common.ExtractDomain(oe.URI)
 							for _, country := range countries {
 								normalizedCountry := common.NormalizeCountryForMetrics(country)
-								s.metrics.RecordTestError(s.Name(), domain, normalizedCountry, "verify_http_error", 0)
+								s.metrics.RecordTestErrorByType("verifier", s.Name(), domain, normalizedCountry, "verify_http_error", 0)
 							}
 						}
 					}
@@ -639,6 +651,7 @@ func (s *Site24x7) Verify(or *common.ObserveResult) (*common.VerifyResult, error
 				if s.metrics != nil {
 					domain := common.ExtractDomain(oe.URI)
 					normalizedCountry := common.NormalizeCountryForMetrics(r.Country)
+					s.logger.Debug("Site24x7 verifier. RecordTestResult metrics. Recording probability for %s - %s - %0.2f", s.Name(), normalizedCountry, r.Avg)
 					s.metrics.RecordTestResult(s.Name(), domain, normalizedCountry, r.Avg, 0)
 				}
 			}

@@ -26,30 +26,6 @@ func NewVerifierMetrics(metrics *sreCommon.Metrics) *VerifierMetrics {
 	return vm
 }
 
-// RecordTestStart records the start of the test
-func (vm *VerifierMetrics) RecordTestStart(verifier, domain, country string) {
-	if vm == nil || vm.metrics == nil {
-		return
-	}
-
-	vm.mutex.RLock()
-	defer vm.mutex.RUnlock()
-
-	// Create a metric with specific labels
-	counter := vm.metrics.Counter(
-		"verifier",
-		"tests_total",
-		"Total number of verifier tests executed",
-		sreCommon.Labels{
-			"verifier": verifier,
-			"domain":   domain,
-			"country":  country,
-			"status":   "started",
-		},
-	)
-	counter.Inc()
-}
-
 // RecordTestStartByType records the start of the test with component type
 func (vm *VerifierMetrics) RecordTestStartByType(componentType, componentName, domain, country string) {
 	if vm == nil || vm.metrics == nil {
@@ -74,43 +50,6 @@ func (vm *VerifierMetrics) RecordTestStartByType(componentType, componentName, d
 		labels,
 	)
 	counter.Inc()
-}
-
-// RecordTestSuccess records the successful execution of the test
-func (vm *VerifierMetrics) RecordTestSuccess(verifier, domain, country string, duration float64) {
-	if vm == nil || vm.metrics == nil {
-		return
-	}
-
-	vm.mutex.RLock()
-	defer vm.mutex.RUnlock()
-
-	// Create a metric for successful tests
-	successCounter := vm.metrics.Counter(
-		"verifier",
-		"tests_success_total",
-		"Number of successful verifier tests",
-		sreCommon.Labels{
-			"verifier": verifier,
-			"domain":   domain,
-			"country":  country,
-		},
-	)
-	successCounter.Inc()
-
-	// Create a metric for the total number of tests
-	totalCounter := vm.metrics.Counter(
-		"verifier",
-		"tests_total",
-		"Total number of verifier tests executed",
-		sreCommon.Labels{
-			"verifier": verifier,
-			"domain":   domain,
-			"country":  country,
-			"status":   "success",
-		},
-	)
-	totalCounter.Inc()
 }
 
 // RecordTestSuccessByType records the successful execution with component type
@@ -150,44 +89,6 @@ func (vm *VerifierMetrics) RecordTestSuccessByType(componentType, componentName,
 		"tests_total",
 		"Total number of tests executed",
 		totalLabels,
-	)
-	totalCounter.Inc()
-}
-
-// RecordTestError records the error of the test
-func (vm *VerifierMetrics) RecordTestError(verifier, domain, country, errorType string, duration float64) {
-	if vm == nil || vm.metrics == nil {
-		return
-	}
-
-	vm.mutex.RLock()
-	defer vm.mutex.RUnlock()
-
-	// Create a metric for errors
-	errorCounter := vm.metrics.Counter(
-		"verifier",
-		"tests_error_total",
-		"Number of failed verifier tests",
-		sreCommon.Labels{
-			"verifier":   verifier,
-			"domain":     domain,
-			"country":    country,
-			"error_type": errorType,
-		},
-	)
-	errorCounter.Inc()
-
-	// Create a metric for the total number of tests
-	totalCounter := vm.metrics.Counter(
-		"verifier",
-		"tests_total",
-		"Total number of verifier tests executed",
-		sreCommon.Labels{
-			"verifier": verifier,
-			"domain":   domain,
-			"country":  country,
-			"status":   "error",
-		},
 	)
 	totalCounter.Inc()
 }
@@ -263,33 +164,18 @@ func (vm *VerifierMetrics) RecordTestResult(verifier, domain, country string, pr
 	)
 	totalCounter.Inc()
 
-	// Record success/error for compatibility
-	if probability == 0 {
-		successCounter := vm.metrics.Counter(
-			"verifier",
-			"tests_success_total",
-			"Number of successful verifier tests",
-			sreCommon.Labels{
-				"verifier": verifier,
-				"domain":   domain,
-				"country":  country,
-			},
-		)
-		successCounter.Inc()
-	} else {
-		errorCounter := vm.metrics.Counter(
-			"verifier",
-			"tests_error_total",
-			"Number of failed verifier tests",
-			sreCommon.Labels{
-				"verifier":   verifier,
-				"domain":     domain,
-				"country":    country,
-				"error_type": "problem_detected",
-			},
-		)
-		errorCounter.Inc()
-	}
+	// Record success for completed tests (regardless of probability)
+	successCounter := vm.metrics.Counter(
+		"verifier",
+		"tests_success_total",
+		"Number of successfully completed verifier tests",
+		sreCommon.Labels{
+			"verifier": verifier,
+			"domain":   domain,
+			"country":  country,
+		},
+	)
+	successCounter.Inc()
 
 	// Record the current probability in gauge
 	probabilityGauge := vm.metrics.Gauge(
@@ -302,7 +188,7 @@ func (vm *VerifierMetrics) RecordTestResult(verifier, domain, country string, pr
 			"country":  country,
 		},
 	)
-	probabilityGauge.Set(probability * 100)
+	probabilityGauge.Set(probability)
 }
 
 // GetMetrics returns the metrics object for direct access

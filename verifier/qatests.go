@@ -26,6 +26,7 @@ type QATestsOptions struct {
 	BusinessProcess  string
 	AllureProjectId  string
 	AllureLaunchName string
+	AllureLaunchTags []string
 	Priority         int
 	SecsBoundary     int
 	TestTimeout      int
@@ -33,24 +34,25 @@ type QATestsOptions struct {
 }
 
 type QATestsRequest struct {
-	BusinessProcess string               `json:"BisnessProcesses"`
-	AllureLaunch    QATestsAllureLaunch  `json:"AllureLaunch"`
-	Priority        int                  `json:"Priority"`
-	SecsBoundary    int                  `json:"SecsBoundary"`
-	Timeout         int                  `json:"Timeout"`
-	Retries         int                  `json:"Retries"`
-	PytestParams    []QATestsPytestParam `json:"PytestParams"`
+	BusinessProcess string              `json:"BisnessProcesses"`
+	PytestParams    QATestsPytestParams `json:"PytestParams"`
+	TaskParams      QATestsTaskParams   `json:"TaskParams"`
 }
 
-type QATestsPytestParam struct {
-	Option string `json:"option"`
-	Value  string `json:"value"`
+type QATestsPytestParams struct {
+	Timeout      int    `json:"Timeout"`
+	Retries      int    `json:"Retries"`
+	Host         string `json:"Host"`
+	ProxyCountry string `json:"ProxyCountry"`
 }
 
-type QATestsAllureLaunch struct {
-	IsOnlyLaunch bool   `json:"isOnlyLaunch"`
-	ProjectId    string `json:"ProjectId"`
-	LaunchName   string `json:"LaunchName"`
+type QATestsTaskParams struct {
+	AllureForceNewLaunch bool     `json:"AllureForceNewLaunch"`
+	AllureProjectId      string   `json:"AllureProjectId"`
+	AllureLaunchName     string   `json:"AllureLaunchName"`
+	AllureLaunchTags     []string `json:"AllureLaunchTags"`
+	Priority             int      `json:"Priority"`
+	SecsBoundary         int      `json:"SecsBoundary"`
 }
 
 type QATestsResponse struct {
@@ -131,28 +133,23 @@ func (q *QATests) runQATest(host, country string) (*QATestsResponse, error) {
 	if q.metrics != nil {
 		domain := common.ExtractDomain(host)
 		normalizedCountry := common.NormalizeCountryForMetrics(country)
-		q.metrics.RecordTestStart(q.Name(), domain, normalizedCountry)
+		q.metrics.RecordTestStartByType("verifier", q.Name(), domain, normalizedCountry)
 	}
 	requestBody := QATestsRequest{
 		BusinessProcess: q.options.BusinessProcess,
-		AllureLaunch: QATestsAllureLaunch{
-			IsOnlyLaunch: false,
-			ProjectId:    q.options.AllureProjectId,
-			LaunchName:   q.options.AllureLaunchName,
+		PytestParams: QATestsPytestParams{
+			Timeout:      q.options.TestTimeout,
+			Retries:      q.options.TestRetries,
+			Host:         host,
+			ProxyCountry: strings.ToLower(country),
 		},
-		Priority:     q.options.Priority,
-		SecsBoundary: q.options.SecsBoundary,
-		Timeout:      q.options.TestTimeout,
-		Retries:      q.options.TestRetries,
-		PytestParams: []QATestsPytestParam{
-			{
-				Option: "proxy-country",
-				Value:  strings.ToLower(country),
-			},
-			{
-				Option: "host",
-				Value:  host,
-			},
+		TaskParams: QATestsTaskParams{
+			AllureForceNewLaunch: false,
+			AllureProjectId:      q.options.AllureProjectId,
+			AllureLaunchName:     q.options.AllureLaunchName,
+			AllureLaunchTags:     q.options.AllureLaunchTags,
+			Priority:             q.options.Priority,
+			SecsBoundary:         q.options.SecsBoundary,
 		},
 	}
 
@@ -162,7 +159,7 @@ func (q *QATests) runQATest(host, country string) (*QATestsResponse, error) {
 		if q.metrics != nil {
 			domain := common.ExtractDomain(host)
 			normalizedCountry := common.NormalizeCountryForMetrics(country)
-			q.metrics.RecordTestError(q.Name(), domain, normalizedCountry, "marshal_error", 0)
+			q.metrics.RecordTestErrorByType("verifier", q.Name(), domain, normalizedCountry, "marshal_error", 0)
 		}
 		return nil, fmt.Errorf("failed to marshal request: %v", err)
 	}
@@ -183,7 +180,7 @@ func (q *QATests) runQATest(host, country string) (*QATestsResponse, error) {
 		if q.metrics != nil {
 			domain := common.ExtractDomain(host)
 			normalizedCountry := common.NormalizeCountryForMetrics(country)
-			q.metrics.RecordTestError(q.Name(), domain, normalizedCountry, "request_creation_error", 0)
+			q.metrics.RecordTestErrorByType("verifier", q.Name(), domain, normalizedCountry, "request_creation_error", 0)
 		}
 		return nil, fmt.Errorf("failed to create request: %v", err)
 	}
@@ -197,7 +194,7 @@ func (q *QATests) runQATest(host, country string) (*QATestsResponse, error) {
 		if q.metrics != nil {
 			domain := common.ExtractDomain(host)
 			normalizedCountry := common.NormalizeCountryForMetrics(country)
-			q.metrics.RecordTestError(q.Name(), domain, normalizedCountry, "request_execution_error", 0)
+			q.metrics.RecordTestErrorByType("verifier", q.Name(), domain, normalizedCountry, "request_execution_error", 0)
 		}
 		return nil, fmt.Errorf("failed to execute request: %v", err)
 	}
@@ -208,7 +205,7 @@ func (q *QATests) runQATest(host, country string) (*QATestsResponse, error) {
 		if q.metrics != nil {
 			domain := common.ExtractDomain(host)
 			normalizedCountry := common.NormalizeCountryForMetrics(country)
-			q.metrics.RecordTestError(q.Name(), domain, normalizedCountry, "http_status_error", 0)
+			q.metrics.RecordTestErrorByType("verifier", q.Name(), domain, normalizedCountry, "http_status_error", 0)
 		}
 		return nil, fmt.Errorf("unexpected status code: %d", resp.StatusCode)
 	}
@@ -219,7 +216,7 @@ func (q *QATests) runQATest(host, country string) (*QATestsResponse, error) {
 		if q.metrics != nil {
 			domain := common.ExtractDomain(host)
 			normalizedCountry := common.NormalizeCountryForMetrics(country)
-			q.metrics.RecordTestError(q.Name(), domain, normalizedCountry, "response_read_error", 0)
+			q.metrics.RecordTestErrorByType("verifier", q.Name(), domain, normalizedCountry, "response_read_error", 0)
 		}
 		return nil, fmt.Errorf("failed to read response body: %v", err)
 	}
@@ -231,24 +228,14 @@ func (q *QATests) runQATest(host, country string) (*QATestsResponse, error) {
 		if q.metrics != nil {
 			domain := common.ExtractDomain(host)
 			normalizedCountry := common.NormalizeCountryForMetrics(country)
-			q.metrics.RecordTestError(q.Name(), domain, normalizedCountry, "unmarshal_error", 0)
+			q.metrics.RecordTestErrorByType("verifier", q.Name(), domain, normalizedCountry, "unmarshal_error", 0)
 		}
 		return nil, fmt.Errorf("failed to unmarshal response: %v", err)
 	}
 
-	// Record successful result in metrics
-	if q.metrics != nil {
-		domain := common.ExtractDomain(host)
-		normalizedCountry := common.NormalizeCountryForMetrics(country)
+	// HTTP request successful - metrics will be recorded in RecordTestResult
 
-		// Calculate probability based on exitcode
-		probability := 1.0 // by default problem
-		if len(qaResponse.Tasks) > 0 && qaResponse.Tasks[0].Result.ExitCode == 0 {
-			probability = 0.0 // success
-		}
-
-		q.metrics.RecordTestResult(q.Name(), domain, normalizedCountry, probability, 0)
-	}
+	// Probability is calculated and recorded separately in Verify method
 
 	return &qaResponse, nil
 }
@@ -321,15 +308,9 @@ func (q *QATests) Verify(or *common.ObserveResult) (*common.VerifyResult, error)
 
 					qaResponse, err := q.runQATest(host, country)
 					if err != nil {
-						q.logger.Debug("QATests verifier error for %s in %s: %v", host, country, err)
-						// Record error in metrics
-						if q.metrics != nil {
-							domain := common.ExtractDomain(oe.URI)
-							normalizedCountry := common.NormalizeCountryForMetrics(country)
-							q.metrics.RecordTestError(q.Name(), domain, normalizedCountry, "run_qa_test_error", 0)
-						}
-						continue
+						return fmt.Errorf("QATests verifier failed to run test: %s", err)
 					}
+
 					qaResults = append(qaResults, *qaResponse)
 				default:
 					return fmt.Errorf("QATests verifier has no support for %s endpoint %s in countries %s", scheme, uri, countries)
@@ -395,7 +376,7 @@ func (q *QATests) Verify(or *common.ObserveResult) (*common.VerifyResult, error)
 	return r, nil
 }
 
-func NewQATests(options *QATestsOptions, observability *common.Observability) *QATests {
+func NewQATests(options *QATestsOptions, observability *common.Observability, metrics *common.VerifierMetrics) *QATests {
 	logger := observability.Logs()
 
 	if utils.IsEmpty(options.URL) {
@@ -406,7 +387,7 @@ func NewQATests(options *QATestsOptions, observability *common.Observability) *Q
 	qa := &QATests{
 		logger:  logger,
 		options: options,
-		metrics: common.NewVerifierMetrics(observability.Metrics()),
+		metrics: metrics,
 	}
 
 	qa.client = qa.createHTTPClient()
