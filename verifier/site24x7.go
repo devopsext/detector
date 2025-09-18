@@ -407,6 +407,9 @@ func (s *Site24x7) findCountryByLocation(ltd *vendors.Site24x7LocationTemplateDa
 func (s *Site24x7) processLogReportSummary(oe *common.ObserveEndpoint, locations *vendors.Site24x7LocationTemplateReponse,
 	report []*vendors.Site24x7LogReportDataReport, collectionTypes []string) []*Site24x7Summary {
 
+	s.logger.Debug("Site24x7 processLogReportSummary: Starting processing for URI: %s, Total report entries: %d, Collection types: %v",
+		oe.URI, len(report), collectionTypes)
+
 	r := []*Site24x7Summary{}
 
 	type summary struct {
@@ -454,6 +457,9 @@ func (s *Site24x7) processLogReportSummary(oe *common.ObserveEndpoint, locations
 			availability = float64(100.0)
 		}
 
+		s.logger.Debug("Site24x7 processLogReportSummary: Node data - Country: %s, LocationID: %s, Availability: %s -> converted to: %.2f, ResolvedIP: %s, ResponseCode: %s",
+			country, dr.LocationID, dr.Availability, availability, dr.ResolvedIP, dr.ResponseCode)
+
 		flags := make(common.VerifyStatusFlags)
 
 		if len(oe.IPs) > 0 {
@@ -486,8 +492,13 @@ func (s *Site24x7) processLogReportSummary(oe *common.ObserveEndpoint, locations
 
 		successfulNodes := 0
 		failedNodes := 0
+		totalNodes := len(v)
 
-		for _, sm := range v {
+		s.logger.Debug("Site24x7 processLogReportSummary: Processing country %s with %d total nodes", k, totalNodes)
+
+		for i, sm := range v {
+			s.logger.Debug("Site24x7 processLogReportSummary: Node %d for country %s - availability: %.2f, flags: %v",
+				i+1, k, sm.availability, sm.flags)
 
 			if sm.availability == 100.0 {
 				successfulNodes++
@@ -504,10 +515,18 @@ func (s *Site24x7) processLogReportSummary(oe *common.ObserveEndpoint, locations
 
 		var probability float64
 		nodesWithResults := successfulNodes + failedNodes
+		nullNodes := totalNodes - nodesWithResults
+
+		s.logger.Debug("Site24x7 processLogReportSummary: Country %s - Total nodes: %d, Successful: %d, Failed: %d, Null/No results: %d, Nodes with results: %d",
+			k, totalNodes, successfulNodes, failedNodes, nullNodes, nodesWithResults)
+
 		if nodesWithResults > 0 {
 			probability = (float64(failedNodes) / float64(nodesWithResults)) * 100.0
+			s.logger.Debug("Site24x7 processLogReportSummary: Country %s - Probability calculated: (%.0f / %.0f) * 100 = %.2f%%",
+				k, float64(failedNodes), float64(nodesWithResults), probability)
 		} else {
 			probability = 100.0
+			s.logger.Debug("Site24x7 processLogReportSummary: Country %s - No results from any node, setting probability to 100.0%%", k)
 		}
 
 		r = append(r, &Site24x7Summary{
@@ -516,12 +535,7 @@ func (s *Site24x7) processLogReportSummary(oe *common.ObserveEndpoint, locations
 			Flags:   flags,
 		})
 
-		// Record result in metrics
-		if s.metrics != nil {
-			domain := common.ExtractDomain(oe.URI)
-			normalizedCountry := common.NormalizeCountryForMetrics(k)
-			s.metrics.RecordTestResult(s.Name(), domain, normalizedCountry, probability, 0)
-		}
+		// Метрика probability теперь записывается в Verify для каждой страны отдельно
 	}
 	return r
 }
@@ -620,6 +634,13 @@ func (s *Site24x7) Verify(or *common.ObserveResult) (*common.VerifyResult, error
 				vs.Probability = &r.Avg
 				vs.Flags = r.Flags
 				ve.Countries[r.Country] = vs
+
+				// Record probability metric for each country
+				if s.metrics != nil {
+					domain := common.ExtractDomain(oe.URI)
+					normalizedCountry := common.NormalizeCountryForMetrics(r.Country)
+					s.metrics.RecordTestResult(s.Name(), domain, normalizedCountry, r.Avg, 0)
+				}
 			}
 			m.Store(nil, ve)
 			return nil

@@ -362,17 +362,9 @@ func (d *Datadog) Observe(sr *common.SourceResult) (*common.ObserveResult, error
 
 	d.logger.Debug("Datadog observer is processing...")
 
-	// Record observer start in metrics
+	// Record observer start in metrics - один запрос для всех доменов
 	if d.metrics != nil {
-		for _, endpoint := range sr.Endpoints.Items() {
-			if endpoint != nil {
-				domain := common.ExtractDomain(endpoint.URI)
-				for _, country := range endpoint.Countries {
-					normalizedCountry := common.NormalizeCountryForMetrics(country)
-					d.metrics.RecordTestStartByType("observer", "datadog", domain, normalizedCountry)
-				}
-			}
-		}
+		d.metrics.RecordTestStartByType("observer", "datadog", "datadog_api", "all")
 	}
 
 	var md DatadogMetricData
@@ -385,9 +377,18 @@ func (d *Datadog) Observe(sr *common.SourceResult) (*common.ObserveResult, error
 
 		mf, err := d.loadV1File(d.options.File)
 		if err != nil {
+			// Record file loading error in metrics
+			if d.metrics != nil {
+				d.metrics.RecordTestErrorByType("observer", "datadog", "datadog_file", "all", "file_loading_error", 0)
+			}
 			return nil, err
 		}
 		md = mf
+
+		// Record successful file loading in metrics
+		if d.metrics != nil {
+			d.metrics.RecordTestSuccessByType("observer", "datadog", "datadog_file", "all", 0)
+		}
 
 		d.logger.Debug("Datadog observer spent %s", time.Since(t1))
 
@@ -406,10 +407,19 @@ func (d *Datadog) Observe(sr *common.SourceResult) (*common.ObserveResult, error
 
 		mf, err := d.getV2Timeseries(query, *from, *to, d.options.TagUri, d.options.TagCountry)
 		if err != nil {
+			// Record HTTP request error in metrics
+			if d.metrics != nil {
+				d.metrics.RecordTestErrorByType("observer", "datadog", "datadog_api", "all", "http_request_error", 0)
+			}
 			return nil, err
 		}
 		md = mf
 		d.logger.Debug("Datadog observer spent %s", time.Since(t1))
+
+		// Record successful HTTP request in metrics
+		if d.metrics != nil {
+			d.metrics.RecordTestSuccessByType("observer", "datadog", "datadog_api", "all", 0)
+		}
 	}
 
 	d.logger.Debug("Datadog observer metrics found: %d", len(md))
@@ -464,24 +474,8 @@ func (d *Datadog) Observe(sr *common.SourceResult) (*common.ObserveResult, error
 		Endpoints: es,
 	}
 
-	// Record degradation results in metrics
-	if d.metrics != nil {
-		for _, endpoint := range es.Items() {
-			if endpoint != nil {
-				domain := common.ExtractDomain(endpoint.URI)
-				for country, degradation := range endpoint.Countries {
-					normalizedCountry := common.NormalizeCountryForMetrics(country)
-					if degradation == nil {
-						// Degradation found - record as error
-						d.metrics.RecordTestErrorByType("observer", "datadog", domain, normalizedCountry, "no_results_found", 0)
-					} else {
-						// No degradation found - record as success
-						d.metrics.RecordTestSuccessByType("observer", "datadog", domain, normalizedCountry, 0)
-					}
-				}
-			}
-		}
-	}
+	// HTTP запрос к Datadog API уже залогирован выше
+	// Здесь больше не логируем метрики для каждого домена/страны
 
 	return r, nil
 }

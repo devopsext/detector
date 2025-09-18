@@ -88,7 +88,7 @@ func (vm *VerifierMetrics) RecordTestSuccess(verifier, domain, country string, d
 	// Create a metric for successful tests
 	successCounter := vm.metrics.Counter(
 		"verifier",
-		"tests_success",
+		"tests_success_total",
 		"Number of successful verifier tests",
 		sreCommon.Labels{
 			"verifier": verifier,
@@ -131,7 +131,7 @@ func (vm *VerifierMetrics) RecordTestSuccessByType(componentType, componentName,
 
 	successCounter := vm.metrics.Counter(
 		componentType,
-		"tests_success",
+		"tests_success_total",
 		"Number of successful tests",
 		labels,
 	)
@@ -166,7 +166,7 @@ func (vm *VerifierMetrics) RecordTestError(verifier, domain, country, errorType 
 	// Create a metric for errors
 	errorCounter := vm.metrics.Counter(
 		"verifier",
-		"tests_error",
+		"tests_error_total",
 		"Number of failed verifier tests",
 		sreCommon.Labels{
 			"verifier":   verifier,
@@ -211,7 +211,7 @@ func (vm *VerifierMetrics) RecordTestErrorByType(componentType, componentName, d
 
 	errorCounter := vm.metrics.Counter(
 		componentType,
-		"tests_error",
+		"tests_error_total",
 		"Number of failed tests",
 		labels,
 	)
@@ -267,7 +267,7 @@ func (vm *VerifierMetrics) RecordTestResult(verifier, domain, country string, pr
 	if probability == 0 {
 		successCounter := vm.metrics.Counter(
 			"verifier",
-			"tests_success",
+			"tests_success_total",
 			"Number of successful verifier tests",
 			sreCommon.Labels{
 				"verifier": verifier,
@@ -279,7 +279,7 @@ func (vm *VerifierMetrics) RecordTestResult(verifier, domain, country string, pr
 	} else {
 		errorCounter := vm.metrics.Counter(
 			"verifier",
-			"tests_error",
+			"tests_error_total",
 			"Number of failed verifier tests",
 			sreCommon.Labels{
 				"verifier":   verifier,

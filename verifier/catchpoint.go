@@ -373,6 +373,8 @@ func (c *Catchpoint) processInstantTestResultSummary(oe *common.ObserveEndpoint,
 			if h.HostName == oe.URI {
 				value := float64(h.Items[avbIndex])
 				Availability = &value
+				c.logger.Debug("Catchpoint processInstantTestResultSummary: Found availability for %s - HostName: %s, Index: %d, Value: %.2f",
+					country, h.HostName, avbIndex, value)
 			}
 		}
 
@@ -408,6 +410,9 @@ func (c *Catchpoint) processInstantTestResultSummary(oe *common.ObserveEndpoint,
 
 		}
 
+		c.logger.Debug("Catchpoint processInstantTestResultSummary: Node data - Country: %s, Node: %s, Availability: %.2f, Flags: %v",
+			country, r.Data.InstantTestRecord.Node.Name, *Availability, flags)
+
 		sm = append(sm, summary{
 			availability: *Availability,
 			flags:        flags,
@@ -419,8 +424,14 @@ func (c *Catchpoint) processInstantTestResultSummary(oe *common.ObserveEndpoint,
 
 		flags := make(common.VerifyStatusFlags)
 		sum := float64(100.0)
+		totalNodes := len(v)
 
-		for _, sm := range v {
+		c.logger.Debug("Catchpoint processInstantTestResultSummary: Processing country %s with %d total nodes", k, totalNodes)
+
+		for i, sm := range v {
+			c.logger.Debug("Catchpoint processInstantTestResultSummary: Node %d for country %s - availability: %.2f, flags: %v",
+				i+1, k, sm.availability, sm.flags)
+
 			sum = sum - sm.availability
 
 			for k, v := range sm.flags {
@@ -432,6 +443,9 @@ func (c *Catchpoint) processInstantTestResultSummary(oe *common.ObserveEndpoint,
 
 		avg := sum / float64(len(v))
 
+		c.logger.Debug("Catchpoint processInstantTestResultSummary: Country %s - Total nodes: %d, Sum calculation: 100.0 - sum of availabilities = %.2f, Average probability: %.2f / %d = %.2f",
+			k, totalNodes, sum, sum, totalNodes, avg)
+
 		rs = append(rs, CatchpointSummary{
 			Country: k,
 			Avg:     avg,
@@ -439,25 +453,7 @@ func (c *Catchpoint) processInstantTestResultSummary(oe *common.ObserveEndpoint,
 		})
 	}
 
-	// Record result in metrics one time for each unique country
-	if c.metrics != nil {
-		domain := common.ExtractDomain(oe.URI)
-		c.logger.Debug("Catchpoint verifier. processInstantTestResultSummary. Recording metrics for %d unique countries", len(m))
-		for k := range m {
-			normalizedCountry := common.NormalizeCountryForMetrics(k)
-
-			// Calculate average probability for country
-			v := m[k]
-			sum := float64(100.0)
-			for _, sm := range v {
-				sum = sum - sm.availability
-			}
-			avg := sum / float64(len(v))
-
-			c.logger.Debug("Catchpoint verifier. processInstantTestResultSummary. Recording result for country %s with %d nodes, avg probability %f", k, len(v), avg)
-			c.metrics.RecordTestResult(c.Name(), domain, normalizedCountry, avg, 0)
-		}
-	}
+	c.logger.Debug("Catchpoint verifier. processInstantTestResultSummary. Processed %d unique countries", len(m))
 	return &rs, nil
 }
 
@@ -538,6 +534,13 @@ func (c *Catchpoint) Verify(or *common.ObserveResult) (*common.VerifyResult, err
 				vs.Probability = &r.Avg
 				vs.Flags = r.Flags
 				ve.Countries[r.Country] = vs
+
+				// Record probability metric for each country
+				if c.metrics != nil {
+					domain := common.ExtractDomain(oe.URI)
+					normalizedCountry := common.NormalizeCountryForMetrics(r.Country)
+					c.metrics.RecordTestResult(c.Name(), domain, normalizedCountry, r.Avg, 0)
+				}
 			}
 			m.Store(nil, ve)
 			return nil
