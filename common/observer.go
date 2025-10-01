@@ -1,6 +1,7 @@
 package common
 
 import (
+	"fmt"
 	"maps"
 	"slices"
 	"strconv"
@@ -22,6 +23,20 @@ type ObserveEndpoint struct {
 
 type ObserveEndpoints struct {
 	items []*ObserveEndpoint
+}
+
+// ObserveEndpoint
+
+func (oe *ObserveEndpoint) Ident() string {
+
+	countries := ""
+	keys := slices.Collect(maps.Keys(oe.Countries))
+	if len(keys) > 0 {
+		slices.Sort(keys)
+		countries = fmt.Sprintf(" [%s]", strings.Join(keys, ","))
+	}
+
+	return fmt.Sprintf("%s%s", oe.URI, countries)
 }
 
 type ObserverConfiguration struct {

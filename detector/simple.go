@@ -192,7 +192,13 @@ func (a *Simple) verify(or *common.ObserveResult) ([]*common.VerifyResult, error
 
 		g.Go(func() error {
 
-			vr, err := vc.Verifier.Verify(or)
+			// Фильтруем endpoint'ы через триггеры
+			nor := a.FilterTriggersForVerifier(vc.Verifier, or)
+			if nor == nil || len(nor.Endpoints.Items()) == 0 {
+				return nil
+			}
+
+			vr, err := vc.Verifier.Verify(nor)
 			if err != nil {
 				return err
 			}
@@ -201,13 +207,16 @@ func (a *Simple) verify(or *common.ObserveResult) ([]*common.VerifyResult, error
 				return nil
 			}
 
-			l := len(or.Endpoints.Items())
+			l := len(vr.Endpoints.Items())
 			if l == 0 {
 				return nil
 			}
 
 			vr.Configuration = vc
 			m.Store(vc.Verifier.Name(), vr)
+
+			// Обновляем триггеры после успешной верификации
+			a.UpdateTriggersForVerifier(vc.Verifier, nor)
 			return nil
 		})
 	}
@@ -275,6 +284,61 @@ func (a *Simple) UpdateTriggers(n common.Notifier, es *common.VerifyEndpoints) {
 		}
 
 		key := a.TriggerKey(n, ep)
+		if !trs.Exists(key) {
+			trs.Update(key, ep)
+		}
+	}
+}
+
+func (a *Simple) TriggerKeyForVerifier(v common.Verifier, ep *common.ObserveEndpoint) string {
+
+	return fmt.Sprintf("%s: %s", v.Name(), ep.Ident())
+}
+
+func (a *Simple) FilterTriggersForVerifier(v common.Verifier, or *common.ObserveResult) *common.ObserveResult {
+
+	trs := a.options.Triggers
+	if trs == nil {
+		return or
+	}
+
+	eps := &common.ObserveEndpoints{}
+	for _, ep := range or.Endpoints.Items() {
+
+		if ep == nil {
+			continue
+		}
+
+		key := a.TriggerKeyForVerifier(v, ep)
+		if !trs.Exists(key) {
+			eps.Add(ep)
+		}
+	}
+
+	if eps.IsEmpty() {
+		return nil
+	}
+
+	return &common.ObserveResult{
+		Configuration: or.Configuration,
+		Endpoints:     *eps,
+	}
+}
+
+func (a *Simple) UpdateTriggersForVerifier(v common.Verifier, or *common.ObserveResult) {
+
+	trs := a.options.Triggers
+	if trs == nil {
+		return
+	}
+
+	for _, ep := range or.Endpoints.Items() {
+
+		if ep == nil {
+			continue
+		}
+
+		key := a.TriggerKeyForVerifier(v, ep)
 		if !trs.Exists(key) {
 			trs.Update(key, ep)
 		}
