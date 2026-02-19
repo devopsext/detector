@@ -17,7 +17,7 @@ import (
 )
 
 type ConfigFile struct {
-	Endpoints []*common.SourceEndpoint
+	Endpoints []*common.SourceItem
 }
 
 type ConfigOptions struct {
@@ -101,11 +101,13 @@ func (cs *Config) Load() (*common.SourceResult, error) {
 
 	cs.logger.Debug("Config source spent %s", time.Since(t1))
 
-	e := common.SourceEndpoints{}
-	e.Add(config.Endpoints...)
+	e := common.SourceItems{}
+	for _, ep := range config.Endpoints {
+		e.Add(ep)
+	}
 
 	r := &common.SourceResult{
-		Endpoints: e,
+		Items: e,
 	}
 
 	return r, nil

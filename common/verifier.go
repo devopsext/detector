@@ -28,13 +28,14 @@ type VerifyStatus struct {
 
 type VerifyCountries = map[string]*VerifyStatus
 
-type VerifyEndpoint struct {
-	URI       string
+type VerifyItem struct {
+	Key       string         `json:"key,omitempty"` // primary key
+	URI       string         `json:"uri,omitempty"` // backward compat для доменов
 	Countries VerifyCountries
 }
 
-type VerifyEndpoints struct {
-	items []*VerifyEndpoint
+type VerifyItems struct {
+	items []VerifyEntry
 }
 
 type VerifierConfiguration struct {
@@ -44,7 +45,7 @@ type VerifierConfiguration struct {
 
 type VerifyResult struct {
 	Configuration *VerifierConfiguration
-	Endpoints     VerifyEndpoints
+	Items         VerifyItems
 }
 
 type Verifier interface {
@@ -57,93 +58,91 @@ type Verifiers struct {
 	items  []Verifier
 }
 
-// VerifyEndpoint
+// VerifyItem implements VerifyEntry
 
-func (ve *VerifyEndpoint) Ident() string {
-
-	countries := ""
-	keys := slices.Collect(maps.Keys(ve.Countries))
-	if len(keys) > 0 {
-		slices.Sort(keys)
-		countries = fmt.Sprintf(" [%s]", strings.Join(keys, ","))
+func (ve *VerifyItem) EntryKey() string {
+	if ve.Key != "" {
+		return ve.Key
 	}
-
-	return fmt.Sprintf("%s%s", ve.URI, countries)
+	return NormalizeURI(ve.URI)
 }
 
-// VerifyEndpoints
+// EntryIdent returns EntryKey() + " [sorted countries]" for trigger deduplication.
+// Example: "domain.com [TH,US]", "deposit [BW,ZA]"
+func (ve *VerifyItem) EntryIdent() string {
+	keys := slices.Collect(maps.Keys(ve.Countries))
+	if len(keys) == 0 {
+		return ve.EntryKey()
+	}
+	slices.Sort(keys)
+	return fmt.Sprintf("%s [%s]", ve.EntryKey(), strings.Join(keys, ","))
+}
 
-func (ves *VerifyEndpoints) Clone(ve *VerifyEndpoint) *VerifyEndpoint {
+func (ve *VerifyItem) EntryVerifyCountries() VerifyCountries { return ve.Countries }
+
+// Compile-time check that *VerifyItem implements VerifyEntry.
+var _ VerifyEntry = (*VerifyItem)(nil)
+
+// VerifyItems
+
+func (ves *VerifyItems) Clone(ve *VerifyItem) *VerifyItem {
 
 	vc := make(VerifyCountries)
 	for k, v := range ve.Countries {
-
 		vc[k] = &VerifyStatus{
 			Probability: v.Probability,
 			Flags:       v.Flags,
 		}
 	}
 
-	new := &VerifyEndpoint{
+	return &VerifyItem{
+		Key:       ve.Key,
 		URI:       ve.URI,
 		Countries: vc,
 	}
-	return new
 }
 
-func (ves *VerifyEndpoints) Add(e ...*VerifyEndpoint) {
+func (ves *VerifyItems) Add(e ...VerifyEntry) {
 	ves.items = append(ves.items, e...)
 }
 
-func (ves *VerifyEndpoints) Items() []*VerifyEndpoint {
+func (ves *VerifyItems) Items() []VerifyEntry {
 	return ves.items
 }
 
-func (ves *VerifyEndpoints) IsEmpty() bool {
+func (ves *VerifyItems) IsEmpty() bool {
 	return len(ves.items) == 0
 }
 
-func (ves *VerifyEndpoints) Reduce() VerifyEndpoints {
+func (ves *VerifyItems) Reduce() VerifyItems {
 
-	// find same URIs
-	uris := make(map[string][]*VerifyEndpoint)
-	for _, ep := range ves.items {
-
-		if ep == nil {
+	// group by EntryKey
+	groups := make(map[string][]VerifyEntry)
+	for _, entry := range ves.items {
+		if entry == nil {
 			continue
 		}
-
-		uri := NormalizeURI(ep.URI)
-		items := uris[uri]
-		if items == nil {
-			items = []*VerifyEndpoint{}
-		}
-		items = append(items, ep)
-		uris[uri] = items
+		k := entry.EntryKey()
+		groups[k] = append(groups[k], entry)
 	}
 
-	r := VerifyEndpoints{}
+	r := VerifyItems{}
 
-	// calculate avg per uri
-	for uri, items := range uris {
+	for key, items := range groups {
 
-		// group by country, add ips, gather responses
 		countries := make(map[string][]*VerifyStatus)
 
 		for _, item := range items {
-
-			for k, v := range item.Countries {
-
+			for k, v := range item.EntryVerifyCountries() {
 				if v == nil {
 					continue
 				}
-				k := NormalizeCountry(k)
-				values := countries[k]
-				countries[k] = append(values, v)
+				nc := NormalizeCountry(k)
+				countries[nc] = append(countries[nc], v)
 			}
 		}
 
-		// calculate avg per country
+		// calculate avg per country + merge flags
 		vcountries := make(VerifyCountries)
 		for k, values := range countries {
 
@@ -152,25 +151,17 @@ func (ves *VerifyEndpoints) Reduce() VerifyEndpoints {
 			flags := make(map[VerifyStatusFlag]bool)
 
 			for _, v := range values {
-
 				if v == nil {
 					continue
 				}
-
 				p := v.Probability
 				if p == nil {
 					continue
 				}
-
 				sum = sum + *p
 				count++
 
-				if len(v.Flags) == 0 {
-					continue
-				}
-
 				for f, b := range v.Flags {
-
 					if !b {
 						continue
 					}
@@ -189,8 +180,8 @@ func (ves *VerifyEndpoints) Reduce() VerifyEndpoints {
 			}
 		}
 
-		ep := &VerifyEndpoint{
-			URI:       uri,
+		ep := &VerifyItem{
+			Key:       key,
 			Countries: vcountries,
 		}
 		r.Add(ep)
@@ -216,11 +207,8 @@ func (vs *Verifiers) Items() []Verifier {
 func (vs *Verifiers) GetDefaultConfigurations() []*VerifierConfiguration {
 
 	r := []*VerifierConfiguration{}
-
 	for _, v := range vs.items {
-		r = append(r, &VerifierConfiguration{
-			Verifier: v,
-		})
+		r = append(r, &VerifierConfiguration{Verifier: v})
 	}
 	return r
 }

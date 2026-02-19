@@ -32,7 +32,7 @@ type DatadogOptions struct {
 }
 
 type DatadogMetricSummary struct {
-	URI     string
+	Key     string // primary key (tag value: URI для доменов, process name для BP и т.д.)
 	Country string
 	Avg     float64
 	Min     float64
@@ -127,7 +127,7 @@ func (d *Datadog) timeseriesV1ToData(resp *datadogV1.MetricsQueryResponse, minLi
 		avg := sum / float64(count)
 
 		r = append(r, &DatadogMetricSummary{
-			URI:     common.NormalizeURI(uri),
+			Key:     common.NormalizeURI(uri),
 			Country: common.NormalizeCountry(country),
 			Avg:     avg,
 			Min:     min,
@@ -238,7 +238,7 @@ func (d *Datadog) timeseriesV2ToData(resp *datadogV2.TimeseriesFormulaQueryRespo
 		avg := sum / float64(count)
 
 		r = append(r, &DatadogMetricSummary{
-			URI:     common.NormalizeURI(uri),
+			Key:     common.NormalizeURI(uri),
 			Country: common.NormalizeCountry(country),
 			Avg:     avg,
 			Min:     min,
@@ -308,20 +308,20 @@ func (d *Datadog) getFromTo(duration string) (*time.Time, *time.Time, error) {
 	return &start, &end, nil
 }
 
-func (d *Datadog) filterURIbyCountry(md DatadogMetricData, uri, country string) DatadogMetricData {
+func (d *Datadog) filterByKeyAndCountry(md DatadogMetricData, key, country string) DatadogMetricData {
 
 	r := DatadogMetricData{}
 	for _, k := range md {
-		if k.URI == uri && k.Country == country {
+		if k.Key == key && k.Country == country {
 			r = append(r, k)
 		}
 	}
 	return r
 }
 
-func (d *Datadog) firstURIbyCountry(md DatadogMetricData, uri, country string) *DatadogMetricSummary {
+func (d *Datadog) firstByKeyAndCountry(md DatadogMetricData, key, country string) *DatadogMetricSummary {
 
-	r := d.filterURIbyCountry(md, uri, country)
+	r := d.filterByKeyAndCountry(md, key, country)
 	if len(r) > 0 {
 		return r[0]
 	}
@@ -331,18 +331,18 @@ func (d *Datadog) firstURIbyCountry(md DatadogMetricData, uri, country string) *
 func (d *Datadog) buildQuery(sr *common.SourceResult, query, tagUri string) string {
 
 	from := ""
-	for _, e := range sr.Endpoints.Items() {
+	for _, entry := range sr.Items.Items() {
 
-		if e == nil {
+		if entry == nil {
 			continue
 		}
 
-		uri := common.NormalizeURI(e.URI)
-		if utils.IsEmpty(uri) {
+		key := entry.EntryKey()
+		if utils.IsEmpty(key) {
 			continue
 		}
 
-		filter := fmt.Sprintf("%s:%s", tagUri, uri)
+		filter := fmt.Sprintf("%s:%s", tagUri, key)
 
 		if !utils.IsEmpty(from) {
 			from = fmt.Sprintf("%s OR %s", from, filter)
@@ -356,8 +356,8 @@ func (d *Datadog) buildQuery(sr *common.SourceResult, query, tagUri string) stri
 
 func (d *Datadog) Observe(sr *common.SourceResult) (*common.ObserveResult, error) {
 
-	if sr.Endpoints.IsEmpty() {
-		return nil, errors.New("Datadog observer cannot process empty endpoints")
+	if sr.Items.IsEmpty() {
+		return nil, errors.New("Datadog observer cannot process empty items")
 	}
 
 	d.logger.Debug("Datadog observer is processing...")
@@ -427,24 +427,24 @@ func (d *Datadog) Observe(sr *common.SourceResult) (*common.ObserveResult, error
 		return nil, nil
 	}
 
-	es := common.ObserveEndpoints{}
+	es := common.ObserveItems{}
 
-	for _, e := range sr.Endpoints.Items() {
+	for _, entry := range sr.Items.Items() {
 
-		if e == nil {
+		if entry == nil {
 			continue
 		}
 
-		uri := common.NormalizeURI(e.URI)
+		key := entry.EntryKey()
 
 		count := 0
 		sum := float64(0.0)
 		countries := make(common.ObserveCountries)
 
-		for _, country := range e.Countries {
+		for _, country := range entry.EntryCountries() {
 
 			normalizedCountry := common.NormalizeCountry(country)
-			sm := d.firstURIbyCountry(md, uri, normalizedCountry)
+			sm := d.firstByKeyAndCountry(md, key, normalizedCountry)
 
 			if sm == nil {
 				countries[country] = nil
@@ -461,17 +461,20 @@ func (d *Datadog) Observe(sr *common.SourceResult) (*common.ObserveResult, error
 			continue
 		}
 
-		e := &common.ObserveEndpoint{
-			URI:       uri,
+		ep := &common.ObserveItem{
+			Key:       key,
 			Countries: countries,
-			IPs:       e.IPs,
-			Response:  e.Response,
 		}
-		es.Add(e)
+		// domain-specific fields
+		if se, ok := entry.(*common.SourceItem); ok {
+			ep.IPs = se.IPs
+			ep.Response = se.Response
+		}
+		es.Add(ep)
 	}
 
 	r := &common.ObserveResult{
-		Endpoints: es,
+		Items: es,
 	}
 
 	// HTTP запрос к Datadog API уже залогирован выше

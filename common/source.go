@@ -8,26 +8,44 @@ import (
 	"github.com/devopsext/utils"
 )
 
-type SourceEndpointResponse struct {
+type SourceItemResponse struct {
 	Code    string `json:"code,omitempty"`
 	Content string `json:"content,omitempty"`
 }
 
-type SourceEndpoint struct {
-	URI       string                  `json:"uri"`
-	Disabled  bool                    `json:"disabled"`
-	Countries []string                `json:"countries,omitempty"`
-	IPs       []string                `json:"ips,omitempty"`
-	Detectors []string                `json:"detectors,omitempty"`
-	Response  *SourceEndpointResponse `json:"response,omitempty"`
+type SourceItem struct {
+	Key       string               `json:"key,omitempty"`  // универсальный primary key (BP: "deposit", Frontend: "web-trader:panel")
+	URI       string               `json:"uri,omitempty"` // домен (backward compat)
+	Disabled  bool                 `json:"disabled"`
+	Countries []string             `json:"countries,omitempty"`
+	IPs       []string             `json:"ips,omitempty"`
+	Detectors []string             `json:"detectors,omitempty"`
+	Response  *SourceItemResponse   `json:"response,omitempty"`
 }
 
-type SourceEndpoints struct {
-	items []*SourceEndpoint
+// EntryKey returns the primary grouping key.
+// Returns Key if set explicitly (BP, Frontend), otherwise NormalizeURI(URI) for domains.
+func (se *SourceItem) EntryKey() string {
+	if se.Key != "" {
+		return se.Key
+	}
+	return NormalizeURI(se.URI)
+}
+
+func (se *SourceItem) EntryIdent() string       { return se.EntryKey() }
+func (se *SourceItem) EntryCountries() []string { return se.Countries }
+func (se *SourceItem) EntryDisabled() bool      { return se.Disabled }
+func (se *SourceItem) EntryDetectors() []string { return se.Detectors }
+
+// Compile-time check that *SourceItem implements SourceEntry.
+var _ SourceEntry = (*SourceItem)(nil)
+
+type SourceItems struct {
+	items []SourceEntry
 }
 
 type SourceResult struct {
-	Endpoints SourceEndpoints
+	Items SourceItems
 }
 
 type Source interface {
@@ -41,14 +59,14 @@ type Sources struct {
 	items  []Source
 }
 
-func CheckSourceEndpoints(es []*SourceEndpoint) []*SourceEndpoint {
-
-	r := []*SourceEndpoint{}
+// CheckSourceItems filters out nil or empty-key items.
+func CheckSourceItems(es []*SourceItem) []*SourceItem {
+	var r []*SourceItem
 	for _, p := range es {
 		if p == nil {
 			continue
 		}
-		if utils.IsEmpty(p.URI) {
+		if utils.IsEmpty(p.EntryKey()) {
 			continue
 		}
 		r = append(r, p)
@@ -56,19 +74,20 @@ func CheckSourceEndpoints(es []*SourceEndpoint) []*SourceEndpoint {
 	return r
 }
 
-// SourceEndpoints
+// SourceItems
 
-func (ses *SourceEndpoints) Clone(se *SourceEndpoint) *SourceEndpoint {
+func (ses *SourceItems) Clone(se *SourceItem) *SourceItem {
 
-	var r *SourceEndpointResponse
+	var r *SourceItemResponse
 	if se.Response != nil {
-		r = &SourceEndpointResponse{
+		r = &SourceItemResponse{
 			Code:    se.Response.Code,
 			Content: se.Response.Content,
 		}
 	}
 
-	new := &SourceEndpoint{
+	return &SourceItem{
+		Key:       se.Key,
 		URI:       se.URI,
 		Disabled:  se.Disabled,
 		Countries: se.Countries,
@@ -76,81 +95,70 @@ func (ses *SourceEndpoints) Clone(se *SourceEndpoint) *SourceEndpoint {
 		Detectors: se.Detectors,
 		Response:  r,
 	}
-	return new
 }
 
-func (ses *SourceEndpoints) Add(e ...*SourceEndpoint) {
+func (ses *SourceItems) Add(e ...SourceEntry) {
 	ses.items = append(ses.items, e...)
 }
 
-func (ses *SourceEndpoints) Items() []*SourceEndpoint {
+func (ses *SourceItems) Items() []SourceEntry {
 	return ses.items
 }
 
-func (ses *SourceEndpoints) IsEmpty() bool {
+func (ses *SourceItems) IsEmpty() bool {
 	return len(ses.items) == 0
 }
 
-func (ses *SourceEndpoints) Reduce() SourceEndpoints {
+func (ses *SourceItems) Reduce() SourceItems {
 
-	// find same URIs
-	uris := make(map[string][]*SourceEndpoint)
-	for _, ep := range ses.items {
-
-		if ep == nil {
+	// group by EntryKey
+	groups := make(map[string][]SourceEntry)
+	for _, entry := range ses.items {
+		if entry == nil {
 			continue
 		}
-
-		uri := NormalizeURI(ep.URI)
-		items := uris[uri]
-		if items == nil {
-			items = []*SourceEndpoint{}
-		}
-		items = append(items, ep)
-		uris[uri] = items
+		k := entry.EntryKey()
+		groups[k] = append(groups[k], entry)
 	}
 
-	r := SourceEndpoints{}
+	r := SourceItems{}
 
-	for uri, items := range uris {
+	for key, items := range groups {
 
-		// group by country, add ips, gather responses
 		countries := []string{}
 		ips := []string{}
-		responses := []*SourceEndpointResponse{}
+		responses := []*SourceItemResponse{}
 
 		for _, item := range items {
 
-			for _, c := range item.Countries {
-
+			for _, c := range item.EntryCountries() {
 				if utils.Contains(countries, c) {
 					continue
 				}
 				countries = append(countries, c)
 			}
 
-			for _, ip := range item.IPs {
-
-				if utils.Contains(ips, ip) {
-					continue
+			// domain-specific fields via type assertion
+			if ep, ok := item.(*SourceItem); ok {
+				for _, ip := range ep.IPs {
+					if utils.Contains(ips, ip) {
+						continue
+					}
+					ips = append(ips, ip)
 				}
-				ips = append(ips, ip)
-			}
-
-			if item.Response != nil {
-				responses = append(responses, item.Response)
+				if ep.Response != nil {
+					responses = append(responses, ep.Response)
+				}
 			}
 		}
 
-		// build response
-		var response *SourceEndpointResponse
+		var response *SourceItemResponse
 		if len(responses) > 0 {
 
 			codes := []string{}
 			contents := []string{}
 
 			for _, res := range responses {
-
 				if !utils.IsEmpty(res.Code) && !utils.Contains(codes, res.Code) {
 					codes = append(codes, res.Code)
 				}
@@ -169,14 +177,14 @@ func (ses *SourceEndpoints) Reduce() SourceEndpoints {
 				content = strings.Join(contents, "|")
 			}
 
-			response = &SourceEndpointResponse{
+			response = &SourceItemResponse{
 				Code:    code,
 				Content: content,
 			}
 		}
 
-		ep := &SourceEndpoint{
-			URI:       uri,
+		ep := &SourceItem{
+			Key:       key,
 			Countries: countries,
 			IPs:       ips,
 			Response:  response,
@@ -203,7 +211,6 @@ func (ss *Sources) Items() []Source {
 func (ss *Sources) FindByName(name string) Source {
 
 	for _, s := range ss.items {
-
 		if s.Name() == name {
 			return s
 		}

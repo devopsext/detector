@@ -13,15 +13,15 @@ import (
 type ObserveProbability = float64
 type ObserveCountries = map[string]*ObserveProbability
 
-type ObserveEndpoint struct {
-	URI       string
+type ObserveItem struct {
+	Key       string `json:"key,omitempty"` // primary key (значение DataDog тега, домен и т.д.)
 	Countries ObserveCountries
 	IPs       []string
-	Response  *SourceEndpointResponse
+	Response  *SourceItemResponse
 }
 
-type ObserveEndpoints struct {
-	items []*ObserveEndpoint
+type ObserveItems struct {
+	items []ObserveEntry
 }
 
 type ObserverConfiguration struct {
@@ -31,7 +31,7 @@ type ObserverConfiguration struct {
 
 type ObserveResult struct {
 	Configuration *ObserverConfiguration
-	Endpoints     ObserveEndpoints
+	Items         ObserveItems
 }
 
 type Observer interface {
@@ -44,12 +44,24 @@ type Observers struct {
 	items  []Observer
 }
 
-// ObserveEndpoints
+// ObserveItem implements ObserveEntry
 
-func (oes *ObserveEndpoints) Clone(oe *ObserveEndpoint) *ObserveEndpoint {
+func (oi *ObserveItem) EntryKey() string {
+	return oi.Key
+}
+
+func (oi *ObserveItem) EntryIdent() string                      { return oi.EntryKey() }
+func (oi *ObserveItem) EntryObserveCountries() ObserveCountries { return oi.Countries }
+
+// Compile-time check that *ObserveItem implements ObserveEntry.
+var _ ObserveEntry = (*ObserveItem)(nil)
+
+// ObserveItems
+
+func (oes *ObserveItems) Clone(oi *ObserveItem) *ObserveItem {
 
 	oc := make(ObserveCountries)
-	for k, v := range oe.Countries {
+	for k, v := range oi.Countries {
 
 		var p ObserveProbability
 		if v != nil {
@@ -58,78 +70,66 @@ func (oes *ObserveEndpoints) Clone(oe *ObserveEndpoint) *ObserveEndpoint {
 		oc[k] = &p
 	}
 
-	new := &ObserveEndpoint{
-		URI:       oe.URI,
+	return &ObserveItem{
+		Key:       oi.Key,
 		Countries: oc,
-		IPs:       oe.IPs,
-		Response:  oe.Response,
+		IPs:       oi.IPs,
+		Response:  oi.Response,
 	}
-	return new
 }
 
-func (oes *ObserveEndpoints) Add(e ...*ObserveEndpoint) {
+func (oes *ObserveItems) Add(e ...ObserveEntry) {
 	oes.items = append(oes.items, e...)
 }
 
-func (oes *ObserveEndpoints) Items() []*ObserveEndpoint {
+func (oes *ObserveItems) Items() []ObserveEntry {
 	return oes.items
 }
 
-func (oes *ObserveEndpoints) IsEmpty() bool {
+func (oes *ObserveItems) IsEmpty() bool {
 	return len(oes.items) == 0
 }
 
-func (oes *ObserveEndpoints) Reduce() ObserveEndpoints {
+func (oes *ObserveItems) Reduce() ObserveItems {
 
-	// find same URIs
-	uris := make(map[string][]*ObserveEndpoint)
-	for _, ep := range oes.items {
-
-		if ep == nil {
+	// group by EntryKey
+	groups := make(map[string][]ObserveEntry)
+	for _, entry := range oes.items {
+		if entry == nil {
 			continue
 		}
-
-		uri := NormalizeURI(ep.URI)
-		items := uris[uri]
-		if items == nil {
-			items = []*ObserveEndpoint{}
-		}
-		items = append(items, ep)
-		uris[uri] = items
+		k := entry.EntryKey()
+		groups[k] = append(groups[k], entry)
 	}
 
-	r := ObserveEndpoints{}
+	r := ObserveItems{}
 
-	// calculate avg per uri
-	for uri, items := range uris {
+	for key, items := range groups {
 
-		// group by country, add ips, gather responses
 		countries := make(map[string][]*ObserveProbability)
 		ips := []string{}
-		responses := []*SourceEndpointResponse{}
+		responses := []*SourceItemResponse{}
 
 		for _, item := range items {
 
-			for k, v := range item.Countries {
-
+			for k, v := range item.EntryObserveCountries() {
 				if v == nil {
 					continue
 				}
-				k := NormalizeCountry(k)
-				values := countries[k]
-				countries[k] = append(values, v)
+				nc := NormalizeCountry(k)
+				countries[nc] = append(countries[nc], v)
 			}
 
-			for _, ip := range item.IPs {
-
-				if utils.Contains(ips, ip) {
-					continue
+			if ep, ok := item.(*ObserveItem); ok {
+				for _, ip := range ep.IPs {
+					if utils.Contains(ips, ip) {
+						continue
+					}
+					ips = append(ips, ip)
 				}
-				ips = append(ips, ip)
-			}
-
-			if item.Response != nil {
-				responses = append(responses, item.Response)
+				if ep.Response != nil {
+					responses = append(responses, ep.Response)
+				}
 			}
 		}
 
@@ -157,7 +157,7 @@ func (oes *ObserveEndpoints) Reduce() ObserveEndpoints {
 		}
 
 		// build response
-		var response *SourceEndpointResponse
+		var response *SourceItemResponse
 		if len(responses) > 0 {
 
 			codes := []string{}
@@ -183,14 +183,14 @@ func (oes *ObserveEndpoints) Reduce() ObserveEndpoints {
 				content = strings.Join(contents, "|")
 			}
 
-			response = &SourceEndpointResponse{
+			response = &SourceItemResponse{
 				Code:    code,
 				Content: content,
 			}
 		}
 
-		ep := &ObserveEndpoint{
-			URI:       uri,
+		ep := &ObserveItem{
+			Key:       key,
 			Countries: ecountries,
 			IPs:       ips,
 			Response:  response,

@@ -81,8 +81,8 @@ func (s *Slack) execute(mr *vendors.SlackMessageResponse, vr *common.VerifyResul
 
 func (s *Slack) Notify(vr *common.VerifyResult) error {
 
-	if vr.Endpoints.IsEmpty() {
-		return errors.New("Slack notifier cannot process empty endpoints")
+	if vr.Items.IsEmpty() {
+		return errors.New("Slack notifier cannot process empty items")
 	}
 
 	s.logger.Debug("Slack notifier is processing...")

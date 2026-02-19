@@ -240,7 +240,7 @@ func (q *QATests) runQATest(host, country string) (*QATestsResponse, error) {
 	return &qaResponse, nil
 }
 
-func (q *QATests) processQATestResultsSummary(oe *common.ObserveEndpoint, results *[]QATestsResponse) (*[]QATestsSummary, error) {
+func (q *QATests) processQATestResultsSummary(oi *common.ObserveItem, results *[]QATestsResponse) (*[]QATestsSummary, error) {
 	var rs []QATestsSummary
 
 	for _, r := range *results {
@@ -272,8 +272,8 @@ func (q *QATests) processQATestResultsSummary(oe *common.ObserveEndpoint, result
 }
 
 func (q *QATests) Verify(or *common.ObserveResult) (*common.VerifyResult, error) {
-	if or.Endpoints.IsEmpty() {
-		return nil, errors.New("QATests verifier cannot process empty endpoints")
+	if or.Items.IsEmpty() {
+		return nil, errors.New("QATests verifier cannot process empty items")
 	}
 
 	q.logger.Debug("QATests verifier is processing...")
@@ -282,26 +282,32 @@ func (q *QATests) Verify(or *common.ObserveResult) (*common.VerifyResult, error)
 	g := &errgroup.Group{}
 	m := &sync.Map{}
 
-	for _, oe := range or.Endpoints.Items() {
+	for _, entry := range or.Items.Items() {
+
+		oi, ok := entry.(*common.ObserveItem)
+		if !ok {
+			continue
+		}
+
 		g.Go(func() error {
-			uri := common.NormalizeURI(oe.URI)
+			uri := common.NormalizeURI(oi.EntryKey())
 			var qaResults []QATestsResponse
 			var err error
 
-			countries := slices.Collect(maps.Keys(oe.Countries))
+			countries := slices.Collect(maps.Keys(oi.Countries))
 			if len(countries) == 0 {
 				return nil
 			}
 			scheme := common.URIScheme(uri)
 
-			q.logger.Debug("QATests verifier is checking %s endpoint %s in countries %s", scheme, uri, countries)
+			q.logger.Debug("QATests verifier is checking %s item %s in countries %s", scheme, uri, countries)
 			t1 := time.Now()
 
 			// Collect QA test results for all countries
 			for _, country := range countries {
 				switch scheme {
 				case common.URISchemeHttp, common.URISchemeHttps:
-					host := oe.URI
+					host := oi.EntryKey()
 					if utils.IsEmpty(common.URIScheme(uri)) {
 						host = fmt.Sprintf("%s://%s", scheme, host)
 					}
@@ -313,24 +319,24 @@ func (q *QATests) Verify(or *common.ObserveResult) (*common.VerifyResult, error)
 
 					qaResults = append(qaResults, *qaResponse)
 				default:
-					return fmt.Errorf("QATests verifier has no support for %s endpoint %s in countries %s", scheme, uri, countries)
+					return fmt.Errorf("QATests verifier has no support for %s item %s in countries %s", scheme, uri, countries)
 				}
 			}
 
-			q.logger.Debug("QATests verifier checked %s endpoint %s in %s in %s", scheme, uri, countries, time.Since(t1))
+			q.logger.Debug("QATests verifier checked %s item %s in %s in %s", scheme, uri, countries, time.Since(t1))
 
 			if len(qaResults) == 0 {
 				return nil
 			}
 
 			// Process results through processQATestResultsSummary
-			summaries, err := q.processQATestResultsSummary(oe, &qaResults)
+			summaries, err := q.processQATestResultsSummary(oi, &qaResults)
 			if err != nil {
 				return fmt.Errorf("QATests verifier failed to process results: %s", err)
 			}
 
-			ve := &common.VerifyEndpoint{
-				URI:       uri,
+			ve := &common.VerifyItem{
+				Key:       oi.EntryKey(),
 				Countries: common.VerifyCountries{},
 			}
 
@@ -360,9 +366,9 @@ func (q *QATests) Verify(or *common.ObserveResult) (*common.VerifyResult, error)
 
 	q.logger.Debug("QATests verifier spent %s", time.Since(t1))
 
-	vs := common.VerifyEndpoints{}
+	vs := common.VerifyItems{}
 	m.Range(func(key, value any) bool {
-		e, ok := value.(*common.VerifyEndpoint)
+		e, ok := value.(*common.VerifyItem)
 		if !ok {
 			return false
 		}
@@ -371,7 +377,7 @@ func (q *QATests) Verify(or *common.ObserveResult) (*common.VerifyResult, error)
 	})
 
 	r := &common.VerifyResult{
-		Endpoints: vs,
+		Items: vs,
 	}
 	return r, nil
 }

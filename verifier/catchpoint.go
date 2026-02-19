@@ -213,21 +213,21 @@ func (c *Catchpoint) getLogReport(token string, testID int, nodes []*vendors.Nod
 	return &reportOpts, nil
 }
 
-func (c *Catchpoint) verifyHttp(oe *common.ObserveEndpoint, token, scheme string, countries []string) (*[]vendors.CatchpointInstantTestResultReponse, error) {
+func (c *Catchpoint) verifyHttp(oi *common.ObserveItem, token, scheme string, countries []string) (*[]vendors.CatchpointInstantTestResultReponse, error) {
 	// Record test start in metrics for each country
 	if c.metrics != nil {
-		domain := common.ExtractDomain(oe.URI)
+		domain := common.ExtractDomain(oi.EntryKey())
 		for _, country := range countries {
 			normalizedCountry := common.NormalizeCountryForMetrics(country)
 			c.metrics.RecordTestStartByType("verifier", c.Name(), domain, normalizedCountry)
 		}
 	}
 
-	u, err := url.Parse(oe.URI)
+	u, err := url.Parse(oi.EntryKey())
 	if err != nil {
 		// Record error parsing URL in metrics
 		if c.metrics != nil {
-			domain := common.ExtractDomain(oe.URI)
+			domain := common.ExtractDomain(oi.EntryKey())
 			for _, country := range countries {
 				normalizedCountry := common.NormalizeCountryForMetrics(country)
 				c.metrics.RecordTestErrorByType("verifier", c.Name(), domain, normalizedCountry, "url_parse_error", 0)
@@ -236,7 +236,7 @@ func (c *Catchpoint) verifyHttp(oe *common.ObserveEndpoint, token, scheme string
 		return nil, err
 	}
 
-	murl := oe.URI
+	murl := oi.EntryKey()
 	if utils.IsEmpty(u.Scheme) {
 		murl = fmt.Sprintf("%s://%s", scheme, murl)
 	}
@@ -253,13 +253,13 @@ func (c *Catchpoint) verifyHttp(oe *common.ObserveEndpoint, token, scheme string
 		PageSize:    c.options.PageSize,
 	}
 
-	c.logger.Debug("Catchpoint verifier is searching Nodes in %s for InstantTest for endpoint %s...", countries, oe.URI)
+	c.logger.Debug("Catchpoint verifier is searching Nodes in %s for InstantTest for item %s...", countries, oi.EntryKey())
 	var d *vendors.CatchpointSearchNodesWithOptionsResponse
 	for _, country := range countries {
 		nodesOpts.Country = country
 		d, err = c.searchNodesWithOptions(opts, nodesOpts)
 		if err != nil {
-			domain := common.ExtractDomain(oe.URI)
+			domain := common.ExtractDomain(oi.EntryKey())
 			for _, country := range countries {
 				normalizedCountry := common.NormalizeCountryForMetrics(country)
 				c.metrics.RecordTestErrorByType("verifier", c.Name(), domain, normalizedCountry, "search_nodes_error", 0)
@@ -278,10 +278,10 @@ func (c *Catchpoint) verifyHttp(oe *common.ObserveEndpoint, token, scheme string
 		}
 	}
 
-	c.logger.Debug("Catchpoint verifier is creating InstantTest for endpoint %s in countries %s...", oe.URI, countries)
+	c.logger.Debug("Catchpoint verifier is creating InstantTest for item %s in countries %s...", oi.EntryKey(), countries)
 	wmr, err := c.createIstantTest(token, murl, nodes)
 	if err != nil {
-		domain := common.ExtractDomain(oe.URI)
+		domain := common.ExtractDomain(oi.EntryKey())
 		for _, country := range countries {
 			normalizedCountry := common.NormalizeCountryForMetrics(country)
 			c.metrics.RecordTestErrorByType("verifier", c.Name(), domain, normalizedCountry, "create_instant_test_error", 0)
@@ -310,7 +310,7 @@ func (c *Catchpoint) verifyHttp(oe *common.ObserveEndpoint, token, scheme string
 	if lerr != nil {
 		// Record error in metrics
 		if c.metrics != nil {
-			domain := common.ExtractDomain(oe.URI)
+			domain := common.ExtractDomain(oi.EntryKey())
 			for _, country := range countries {
 				normalizedCountry := common.NormalizeCountryForMetrics(country)
 				c.metrics.RecordTestErrorByType("verifier", c.Name(), domain, normalizedCountry, "log_report_error", 0)
@@ -322,7 +322,7 @@ func (c *Catchpoint) verifyHttp(oe *common.ObserveEndpoint, token, scheme string
 	if lrr == nil {
 		// Record error in metrics
 		if c.metrics != nil {
-			domain := common.ExtractDomain(oe.URI)
+			domain := common.ExtractDomain(oi.EntryKey())
 			for _, country := range countries {
 				normalizedCountry := common.NormalizeCountryForMetrics(country)
 				c.metrics.RecordTestErrorByType("verifier", c.Name(), domain, normalizedCountry, "empty_result", 0)
@@ -336,9 +336,9 @@ func (c *Catchpoint) verifyHttp(oe *common.ObserveEndpoint, token, scheme string
 	return lrr, nil
 }
 
-func (c *Catchpoint) processInstantTestResultSummary(oe *common.ObserveEndpoint, results *[]vendors.CatchpointInstantTestResultReponse) (*[]CatchpointSummary, error) {
+func (c *Catchpoint) processInstantTestResultSummary(oi *common.ObserveItem, results *[]vendors.CatchpointInstantTestResultReponse) (*[]CatchpointSummary, error) {
 
-	c.logger.Debug("Catchpoint verifier. processInstantTestResultSummary. Processing %d results for endpoint %s", len(*results), oe.URI)
+	c.logger.Debug("Catchpoint verifier. processInstantTestResultSummary. Processing %d results for item %s", len(*results), oi.EntryKey())
 
 	var rs []CatchpointSummary
 
@@ -347,7 +347,7 @@ func (c *Catchpoint) processInstantTestResultSummary(oe *common.ObserveEndpoint,
 		flags        common.VerifyStatusFlags
 	}
 
-	response := oe.Response
+	response := oi.Response
 
 	var reCode *regexp.Regexp
 	if response != nil && !utils.IsEmpty(response.Code) {
@@ -355,7 +355,7 @@ func (c *Catchpoint) processInstantTestResultSummary(oe *common.ObserveEndpoint,
 	}
 
 	reIPs := make(map[string]*regexp.Regexp)
-	for _, ip := range oe.IPs {
+	for _, ip := range oi.IPs {
 		reIP, _ := regexp.Compile(ip)
 		if reIP == nil {
 			continue
@@ -382,7 +382,7 @@ func (c *Catchpoint) processInstantTestResultSummary(oe *common.ObserveEndpoint,
 			}
 		}
 		for _, h := range *r.Data.InstantTestRecord.TestResult.Hosts.Metrics {
-			if h.HostName == oe.URI {
+			if h.HostName == oi.EntryKey() {
 				value := float64(h.Items[avbIndex])
 				Availability = &value
 				c.logger.Debug("Catchpoint processInstantTestResultSummary: Found availability for %s - HostName: %s, Index: %d, Value: %.2f",
@@ -393,11 +393,11 @@ func (c *Catchpoint) processInstantTestResultSummary(oe *common.ObserveEndpoint,
 		flags := make(common.VerifyStatusFlags)
 
 		var reIP string
-		if len(oe.IPs) > 0 {
+		if len(oi.IPs) > 0 {
 			exists := false
 			for _, v := range reIPs {
 				for _, wr := range *r.Data.InstantTestRecord.TestResult.WebRecords.Items {
-					if wr.NavigationUrl.Host == oe.URI {
+					if wr.NavigationUrl.Host == oi.EntryKey() {
 						reIP = wr.IPAddess
 						break
 					}
@@ -412,7 +412,7 @@ func (c *Catchpoint) processInstantTestResultSummary(oe *common.ObserveEndpoint,
 
 		if reCode != nil {
 			for _, wr := range *r.Data.InstantTestRecord.TestResult.WebRecords.Items {
-				if wr.NavigationUrl.Host == oe.URI {
+				if wr.NavigationUrl.Host == oi.EntryKey() {
 					if !reCode.MatchString(strconv.Itoa(wr.ResponseCode)) {
 						flags[common.VerifyStatusFlagWrongResponseCode] = true
 					}
@@ -471,8 +471,8 @@ func (c *Catchpoint) processInstantTestResultSummary(oe *common.ObserveEndpoint,
 
 func (c *Catchpoint) Verify(or *common.ObserveResult) (*common.VerifyResult, error) {
 
-	if or.Endpoints.IsEmpty() {
-		return nil, errors.New("Catchpoint verifier cannot process empty endpoints")
+	if or.Items.IsEmpty() {
+		return nil, errors.New("Catchpoint verifier cannot process empty items")
 	}
 
 	c.logger.Debug("Catchpoint verifier is processing...")
@@ -483,35 +483,40 @@ func (c *Catchpoint) Verify(or *common.ObserveResult) (*common.VerifyResult, err
 	g := &errgroup.Group{}
 	m := &sync.Map{}
 
-	for _, oe := range or.Endpoints.Items() {
+	for _, entry := range or.Items.Items() {
+
+		oi, ok := entry.(*common.ObserveItem)
+		if !ok {
+			continue
+		}
 
 		g.Go(func() error {
 
-			uri := common.NormalizeURI(oe.URI)
+			uri := common.NormalizeURI(oi.EntryKey())
 			var rr *[]vendors.CatchpointInstantTestResultReponse
 			var err error
 
-			countries := slices.Collect(maps.Keys(oe.Countries))
+			countries := slices.Collect(maps.Keys(oi.Countries))
 			if len(countries) == 0 {
 				return nil
 			}
 			scheme := common.URIScheme(uri)
 
-			c.logger.Debug("Catchpoint verifier is checking %s endpoint %s in countries %s", scheme, uri, countries)
+			c.logger.Debug("Catchpoint verifier is checking %s item %s in countries %s", scheme, uri, countries)
 			t1 := time.Now()
 
 			switch scheme {
 			case common.URISchemeHttp, common.URISchemeHttps:
 
-				rr, err = c.verifyHttp(oe, token, scheme, countries)
+				rr, err = c.verifyHttp(oi, token, scheme, countries)
 				if err != nil {
 					return err
 				}
 			default:
-				return fmt.Errorf("Catchpoint verifier has no support for %s endpoint %s in countries %s", scheme, uri, countries)
+				return fmt.Errorf("Catchpoint verifier has no support for %s item %s in countries %s", scheme, uri, countries)
 			}
 
-			c.logger.Debug("Catchpoint verifier checked %s endpoint %s in %s in %s", scheme, uri, countries, time.Since(t1))
+			c.logger.Debug("Catchpoint verifier checked %s item %s in %s in %s", scheme, uri, countries, time.Since(t1))
 
 			if err != nil {
 				return fmt.Errorf("Catchpoint verifier has error: %s", err)
@@ -521,12 +526,12 @@ func (c *Catchpoint) Verify(or *common.ObserveResult) (*common.VerifyResult, err
 				return nil
 			}
 
-			ve := &common.VerifyEndpoint{
-				URI:       uri,
+			ve := &common.VerifyItem{
+				Key:       oi.EntryKey(),
 				Countries: common.VerifyCountries{},
 			}
 
-			rs, err := c.processInstantTestResultSummary(oe, rr)
+			rs, err := c.processInstantTestResultSummary(oi, rr)
 			if err != nil {
 				return err
 			}
@@ -542,7 +547,7 @@ func (c *Catchpoint) Verify(or *common.ObserveResult) (*common.VerifyResult, err
 
 				// Record probability metric for each country
 				if c.metrics != nil {
-					domain := common.ExtractDomain(oe.URI)
+					domain := common.ExtractDomain(oi.EntryKey())
 					normalizedCountry := common.NormalizeCountryForMetrics(r.Country)
 					c.logger.Debug("Catchpoint verifier. RecordTestResult metrics. Recording probability for %s - %s - %0.2f", c.Name(), normalizedCountry, r.Avg)
 					c.metrics.RecordTestResult(c.Name(), domain, normalizedCountry, r.Avg, 0)
@@ -559,10 +564,10 @@ func (c *Catchpoint) Verify(or *common.ObserveResult) (*common.VerifyResult, err
 
 	c.logger.Debug("Catchpoint verifier spent %s", time.Since(t1))
 
-	vs := common.VerifyEndpoints{}
+	vs := common.VerifyItems{}
 	m.Range(func(key, value any) bool {
 
-		e, ok := value.(*common.VerifyEndpoint)
+		e, ok := value.(*common.VerifyItem)
 		if !ok {
 			return false
 		}
@@ -571,7 +576,7 @@ func (c *Catchpoint) Verify(or *common.ObserveResult) (*common.VerifyResult, err
 	})
 
 	r := &common.VerifyResult{
-		Endpoints: vs,
+		Items: vs,
 	}
 	return r, nil
 }

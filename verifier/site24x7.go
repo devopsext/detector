@@ -246,21 +246,21 @@ func (s *Site24x7) getLogReport(token, ID string) (*vendors.Site24x7LogReportRep
 	return &r, nil
 }
 
-func (s *Site24x7) verifyHttp(oe *common.ObserveEndpoint, token, scheme string, countries []string) (*vendors.Site24x7LogReportData, error) {
+func (s *Site24x7) verifyHttp(oi *common.ObserveItem, token, scheme string, countries []string) (*vendors.Site24x7LogReportData, error) {
 	// Record test start in metrics for each country
 	if s.metrics != nil {
-		domain := common.ExtractDomain(oe.URI)
+		domain := common.ExtractDomain(oi.EntryKey())
 		for _, country := range countries {
 			normalizedCountry := common.NormalizeCountryForMetrics(country)
 			s.metrics.RecordTestStartByType("verifier", s.Name(), domain, normalizedCountry)
 		}
 	}
 
-	u, err := url.Parse(oe.URI)
+	u, err := url.Parse(oi.EntryKey())
 	if err != nil {
 		// Record error parsing URL in metrics
 		if s.metrics != nil {
-			domain := common.ExtractDomain(oe.URI)
+			domain := common.ExtractDomain(oi.EntryKey())
 			for _, country := range countries {
 				normalizedCountry := common.NormalizeCountryForMetrics(country)
 				s.metrics.RecordTestErrorByType("verifier", s.Name(), domain, normalizedCountry, "url_parse_error", 0)
@@ -269,7 +269,7 @@ func (s *Site24x7) verifyHttp(oe *common.ObserveEndpoint, token, scheme string, 
 		return nil, err
 	}
 
-	murl := oe.URI
+	murl := oi.EntryKey()
 	if utils.IsEmpty(u.Scheme) {
 		murl = fmt.Sprintf("%s://%s", scheme, murl)
 	}
@@ -277,10 +277,10 @@ func (s *Site24x7) verifyHttp(oe *common.ObserveEndpoint, token, scheme string, 
 	suffix := fmt.Sprintf("%s [%s] %s", s.options.MonitorName, strings.Join(countries, ","), murl)
 	name := fmt.Sprintf("%s %s", s.options.MonitorName, common.Md5ToString([]byte(suffix)))
 
-	s.logger.Debug("Site24x7 verifier is creating monitor %s for endpoint %s in countries %s...", name, oe.URI, countries)
+	s.logger.Debug("Site24x7 verifier is creating monitor %s for item %s in countries %s...", name, oi.EntryKey(), countries)
 	wmr, err := s.createWebsiteMonitor(token, name, murl, countries)
 	if err != nil {
-		domain := common.ExtractDomain(oe.URI)
+		domain := common.ExtractDomain(oi.EntryKey())
 		for _, country := range countries {
 			normalizedCountry := common.NormalizeCountryForMetrics(country)
 			s.metrics.RecordTestErrorByType("verifier", s.Name(), domain, normalizedCountry, "create_website_monitor_error", 0)
@@ -291,7 +291,7 @@ func (s *Site24x7) verifyHttp(oe *common.ObserveEndpoint, token, scheme string, 
 	s.logger.Debug("Site24x7 verifier is polling now monitor %s...", wmr.Data.DisplayName)
 	_, err = s.pollNow(token, wmr.Data.MonitorID)
 	if err != nil {
-		domain := common.ExtractDomain(oe.URI)
+		domain := common.ExtractDomain(oi.EntryKey())
 		for _, country := range countries {
 			normalizedCountry := common.NormalizeCountryForMetrics(country)
 			s.metrics.RecordTestErrorByType("verifier", s.Name(), domain, normalizedCountry, "poll_now_error", 0)
@@ -326,7 +326,7 @@ func (s *Site24x7) verifyHttp(oe *common.ObserveEndpoint, token, scheme string, 
 	if lerr != nil {
 		// Record error in metrics
 		if s.metrics != nil {
-			domain := common.ExtractDomain(oe.URI)
+			domain := common.ExtractDomain(oi.EntryKey())
 			for _, country := range countries {
 				normalizedCountry := common.NormalizeCountryForMetrics(country)
 				s.metrics.RecordTestErrorByType("verifier", s.Name(), domain, normalizedCountry, "log_report_error", 0)
@@ -338,7 +338,7 @@ func (s *Site24x7) verifyHttp(oe *common.ObserveEndpoint, token, scheme string, 
 	if lrr == nil || lrr.Data == nil {
 		// Record error in metrics
 		if s.metrics != nil {
-			domain := common.ExtractDomain(oe.URI)
+			domain := common.ExtractDomain(oi.EntryKey())
 			for _, country := range countries {
 				normalizedCountry := common.NormalizeCountryForMetrics(country)
 				s.metrics.RecordTestErrorByType("verifier", s.Name(), domain, normalizedCountry, "empty_result", 0)
@@ -416,11 +416,11 @@ func (s *Site24x7) findCountryByLocation(ltd *vendors.Site24x7LocationTemplateDa
 	return ""
 }
 
-func (s *Site24x7) processLogReportSummary(oe *common.ObserveEndpoint, locations *vendors.Site24x7LocationTemplateReponse,
+func (s *Site24x7) processLogReportSummary(oi *common.ObserveItem, locations *vendors.Site24x7LocationTemplateReponse,
 	report []*vendors.Site24x7LogReportDataReport, collectionTypes []string) []*Site24x7Summary {
 
 	s.logger.Debug("Site24x7 processLogReportSummary: Starting processing for URI: %s, Total report entries: %d, Collection types: %v",
-		oe.URI, len(report), collectionTypes)
+		oi.EntryKey(), len(report), collectionTypes)
 
 	r := []*Site24x7Summary{}
 
@@ -429,7 +429,7 @@ func (s *Site24x7) processLogReportSummary(oe *common.ObserveEndpoint, locations
 		flags        common.VerifyStatusFlags
 	}
 
-	response := oe.Response
+	response := oi.Response
 
 	var reCode *regexp.Regexp
 	if response != nil && !utils.IsEmpty(response.Code) {
@@ -437,7 +437,7 @@ func (s *Site24x7) processLogReportSummary(oe *common.ObserveEndpoint, locations
 	}
 
 	reIPs := make(map[string]*regexp.Regexp)
-	for _, ip := range oe.IPs {
+	for _, ip := range oi.IPs {
 		reIP, _ := regexp.Compile(ip)
 		if reIP == nil {
 			continue
@@ -474,7 +474,7 @@ func (s *Site24x7) processLogReportSummary(oe *common.ObserveEndpoint, locations
 
 		flags := make(common.VerifyStatusFlags)
 
-		if len(oe.IPs) > 0 {
+		if len(oi.IPs) > 0 {
 			exists := false
 			for _, v := range reIPs {
 				if v.MatchString(dr.ResolvedIP) {
@@ -554,8 +554,8 @@ func (s *Site24x7) processLogReportSummary(oe *common.ObserveEndpoint, locations
 
 func (s *Site24x7) Verify(or *common.ObserveResult) (*common.VerifyResult, error) {
 
-	if or.Endpoints.IsEmpty() {
-		return nil, errors.New("Site24x7 verifier cannot process empty endpoints")
+	if or.Items.IsEmpty() {
+		return nil, errors.New("Site24x7 verifier cannot process empty items")
 	}
 
 	s.logger.Debug("Site24x7 verifier is processing...")
@@ -576,11 +576,16 @@ func (s *Site24x7) Verify(or *common.ObserveResult) (*common.VerifyResult, error
 	g := &errgroup.Group{}
 	m := &sync.Map{}
 
-	for _, oe := range or.Endpoints.Items() {
+	for _, entry := range or.Items.Items() {
+
+		oi, ok := entry.(*common.ObserveItem)
+		if !ok {
+			continue
+		}
 
 		g.Go(func() error {
 
-			uri := common.NormalizeURI(oe.URI)
+			uri := common.NormalizeURI(oi.EntryKey())
 			var rd *vendors.Site24x7LogReportData
 			var err error
 
@@ -590,23 +595,23 @@ func (s *Site24x7) Verify(or *common.ObserveResult) (*common.VerifyResult, error
 
 			} else {
 
-				countries := slices.Collect(maps.Keys(oe.Countries))
+				countries := slices.Collect(maps.Keys(oi.Countries))
 				if len(countries) == 0 {
 					return nil
 				}
 				scheme := common.URIScheme(uri)
 
-				s.logger.Debug("Site24x7 verifier is checking %s endpoint %s in countries %s", scheme, uri, countries)
+				s.logger.Debug("Site24x7 verifier is checking %s item %s in countries %s", scheme, uri, countries)
 				t1 := time.Now()
 
 				switch scheme {
 				case common.URISchemeHttp, common.URISchemeHttps:
 
-					rd, err = s.verifyHttp(oe, token, scheme, countries)
+					rd, err = s.verifyHttp(oi, token, scheme, countries)
 					if err != nil {
 						// Record error in metrics
 						if s.metrics != nil {
-							domain := common.ExtractDomain(oe.URI)
+							domain := common.ExtractDomain(oi.EntryKey())
 							for _, country := range countries {
 								normalizedCountry := common.NormalizeCountryForMetrics(country)
 								s.metrics.RecordTestErrorByType("verifier", s.Name(), domain, normalizedCountry, "verify_http_error", 0)
@@ -615,10 +620,10 @@ func (s *Site24x7) Verify(or *common.ObserveResult) (*common.VerifyResult, error
 					}
 
 				default:
-					return fmt.Errorf("Site24x7 verifier has no support for %s endpoint %s in countries %s", scheme, uri, countries)
+					return fmt.Errorf("Site24x7 verifier has no support for %s item %s in countries %s", scheme, uri, countries)
 				}
 
-				s.logger.Debug("Site24x7 verifier checked %s endpoint %s in %s in %s", scheme, uri, countries, time.Since(t1))
+				s.logger.Debug("Site24x7 verifier checked %s item %s in %s in %s", scheme, uri, countries, time.Since(t1))
 			}
 
 			if err != nil {
@@ -629,13 +634,13 @@ func (s *Site24x7) Verify(or *common.ObserveResult) (*common.VerifyResult, error
 				return nil
 			}
 
-			ve := &common.VerifyEndpoint{
-				URI:       uri,
+			ve := &common.VerifyItem{
+				Key:       oi.EntryKey(),
 				Countries: common.VerifyCountries{},
 			}
 
 			collectionTypes := []string{vendors.Site24x7DataCollectionTypePollNow, vendors.Site24x7DataCollectionTypeNormal}
-			rs := s.processLogReportSummary(oe, locations, rd.Report, collectionTypes)
+			rs := s.processLogReportSummary(oi, locations, rd.Report, collectionTypes)
 
 			for _, r := range rs {
 
@@ -649,7 +654,7 @@ func (s *Site24x7) Verify(or *common.ObserveResult) (*common.VerifyResult, error
 
 				// Record probability metric for each country
 				if s.metrics != nil {
-					domain := common.ExtractDomain(oe.URI)
+					domain := common.ExtractDomain(oi.EntryKey())
 					normalizedCountry := common.NormalizeCountryForMetrics(r.Country)
 					s.logger.Debug("Site24x7 verifier. RecordTestResult metrics. Recording probability for %s - %s - %0.2f", s.Name(), normalizedCountry, r.Avg)
 					s.metrics.RecordTestResult(s.Name(), domain, normalizedCountry, r.Avg, 0)
@@ -666,10 +671,10 @@ func (s *Site24x7) Verify(or *common.ObserveResult) (*common.VerifyResult, error
 
 	s.logger.Debug("Site24x7 verifier spent %s", time.Since(t1))
 
-	vs := common.VerifyEndpoints{}
+	vs := common.VerifyItems{}
 	m.Range(func(key, value any) bool {
 
-		e, ok := value.(*common.VerifyEndpoint)
+		e, ok := value.(*common.VerifyItem)
 		if !ok {
 			return false
 		}
@@ -678,7 +683,7 @@ func (s *Site24x7) Verify(or *common.ObserveResult) (*common.VerifyResult, error
 	})
 
 	r := &common.VerifyResult{
-		Endpoints: vs,
+		Items: vs,
 	}
 	return r, nil
 }

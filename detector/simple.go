@@ -72,34 +72,34 @@ func (a *Simple) load() ([]*common.SourceResult, error) {
 
 			r := &common.SourceResult{}
 
-			for _, e := range sr.Endpoints.Items() {
+			for _, entry := range sr.Items.Items() {
 
-				if e.Disabled {
+				ep, ok := entry.(*common.SourceItem)
+				if !ok {
 					continue
 				}
 
-				var e1 *common.SourceEndpoint
+				if ep.Disabled {
+					continue
+				}
+
 				name := a.Name()
-				if utils.Contains(e.Detectors, name) || len(e.Detectors) == 0 {
-					e1 = e
-				}
-
-				if e1 == nil {
+				if !utils.Contains(ep.Detectors, name) && len(ep.Detectors) > 0 {
 					continue
 				}
 
-				// need to change countries
+				// filter countries to intersection with detector's countries
 				if len(a.options.Countries) > 0 {
 					nc := []string{}
 					for _, c := range a.options.Countries {
-						if utils.Contains(e1.Countries, c) {
+						if utils.Contains(ep.Countries, c) {
 							nc = append(nc, c)
 						}
 					}
-					e1.Countries = nc
+					ep.Countries = nc
 				}
 
-				r.Endpoints.Add(e1)
+				r.Items.Add(ep)
 			}
 			m.Store(s.Name(), r)
 			return nil
@@ -148,7 +148,7 @@ func (a *Simple) observe(sr *common.SourceResult) ([]*common.ObserveResult, erro
 				return nil
 			}
 
-			l := len(or.Endpoints.Items())
+			l := len(or.Items.Items())
 			if l == 0 {
 				return nil
 			}
@@ -201,7 +201,7 @@ func (a *Simple) verify(or *common.ObserveResult) ([]*common.VerifyResult, error
 				return nil
 			}
 
-			l := len(or.Endpoints.Items())
+			l := len(or.Items.Items())
 			if l == 0 {
 				return nil
 			}
@@ -230,28 +230,33 @@ func (a *Simple) verify(or *common.ObserveResult) ([]*common.VerifyResult, error
 	return r, nil
 }
 
-func (a *Simple) TriggerKey(n common.Notifier, ep *common.VerifyEndpoint) string {
+func (a *Simple) TriggerKey(n common.Notifier, ep *common.VerifyItem) string {
 
-	return fmt.Sprintf("%s: %s", n.Name(), ep.Ident())
+	return fmt.Sprintf("%s: %s", n.Name(), ep.EntryIdent())
 }
 
-func (a *Simple) FilterTriggers(n common.Notifier, vr *common.VerifyEndpoints) *common.VerifyEndpoints {
+func (a *Simple) FilterTriggers(n common.Notifier, vr *common.VerifyItems) *common.VerifyItems {
 
 	trs := a.options.Triggers
 	if trs == nil {
 		return vr
 	}
 
-	eps := &common.VerifyEndpoints{}
-	for _, ep := range vr.Items() {
+	eps := &common.VerifyItems{}
+	for _, entry := range vr.Items() {
 
-		if ep == nil {
+		if entry == nil {
 			continue
 		}
 
-		key := a.TriggerKey(n, ep)
+		ve, ok := entry.(*common.VerifyItem)
+		if !ok {
+			continue
+		}
+
+		key := a.TriggerKey(n, ve)
 		if !trs.Exists(key) {
-			eps.Add(ep)
+			eps.Add(ve)
 		}
 	}
 
@@ -261,22 +266,27 @@ func (a *Simple) FilterTriggers(n common.Notifier, vr *common.VerifyEndpoints) *
 	return eps
 }
 
-func (a *Simple) UpdateTriggers(n common.Notifier, es *common.VerifyEndpoints) {
+func (a *Simple) UpdateTriggers(n common.Notifier, es *common.VerifyItems) {
 
 	trs := a.options.Triggers
 	if trs == nil {
 		return
 	}
 
-	for _, ep := range es.Items() {
+	for _, entry := range es.Items() {
 
-		if ep == nil {
+		if entry == nil {
 			continue
 		}
 
-		key := a.TriggerKey(n, ep)
+		ve, ok := entry.(*common.VerifyItem)
+		if !ok {
+			continue
+		}
+
+		key := a.TriggerKey(n, ve)
 		if !trs.Exists(key) {
-			trs.Update(key, ep)
+			trs.Update(key, ve)
 		}
 	}
 }
@@ -293,23 +303,33 @@ func (a *Simple) notify(vr *common.VerifyResult) error {
 
 	for _, nc := range items {
 
-		es := &common.VerifyEndpoints{}
+		es := &common.VerifyItems{}
 
-		for _, e := range vr.Endpoints.Items() {
+		for _, entry := range vr.Items.Items() {
 
-			if e == nil {
+			if entry == nil {
+				continue
+			}
+
+			ve, ok := entry.(*common.VerifyItem)
+			if !ok {
 				continue
 			}
 
 			countries := make(common.VerifyCountries)
-			for k, s := range e.Countries {
+			for k, s := range ve.EntryVerifyCountries() {
 
+				if s == nil {
+					continue
+				}
 				p := s.Probability
 				if p == nil {
+					a.logger.Debug("Skipping items for notify %s %s. Probability is nil", ve.EntryKey(), k)
 					continue
 				}
 
 				if *p < nc.Probability {
+					a.logger.Debug("Skipping items for notify %s %s %f %f. Probability is less than notifier probability", ve.EntryKey(), k, *p, nc.Probability)
 					continue
 				}
 				countries[k] = s
@@ -318,7 +338,7 @@ func (a *Simple) notify(vr *common.VerifyResult) error {
 			if len(countries) == 0 {
 				continue
 			}
-			en := es.Clone(e)
+			en := es.Clone(ve)
 			en.Countries = countries
 			es.Add(en)
 		}
@@ -335,7 +355,7 @@ func (a *Simple) notify(vr *common.VerifyResult) error {
 			}
 
 			vrn := &common.VerifyResult{
-				Endpoints: *nes,
+				Items: *nes,
 			}
 
 			err := nc.Notifier.Notify(vrn)
@@ -351,14 +371,14 @@ func (a *Simple) notify(vr *common.VerifyResult) error {
 
 func (a *Simple) mergeSourceResults(srs []*common.SourceResult) *common.SourceResult {
 
-	eps := common.SourceEndpoints{}
+	eps := common.SourceItems{}
 
 	for _, sr := range srs {
 
 		if sr == nil {
 			continue
 		}
-		eps.Add(sr.Endpoints.Items()...)
+		eps.Add(sr.Items.Items()...)
 	}
 
 	r := eps.Reduce()
@@ -368,13 +388,13 @@ func (a *Simple) mergeSourceResults(srs []*common.SourceResult) *common.SourceRe
 	}
 
 	return &common.SourceResult{
-		Endpoints: r,
+		Items: r,
 	}
 }
 
 func (a *Simple) mergeObserveResults(ors []*common.ObserveResult) *common.ObserveResult {
 
-	eps := common.ObserveEndpoints{}
+	eps := common.ObserveItems{}
 
 	for _, sr := range ors {
 
@@ -386,15 +406,20 @@ func (a *Simple) mergeObserveResults(ors []*common.ObserveResult) *common.Observ
 			continue
 		}
 
-		es := &common.ObserveEndpoints{}
-		for _, e := range sr.Endpoints.Items() {
+		es := &common.ObserveItems{}
+		for _, entry := range sr.Items.Items() {
 
-			if e == nil {
+			if entry == nil {
+				continue
+			}
+
+			oi, ok := entry.(*common.ObserveItem)
+			if !ok {
 				continue
 			}
 
 			countries := make(common.ObserveCountries)
-			for k, p := range e.Countries {
+			for k, p := range oi.EntryObserveCountries() {
 
 				if p == nil {
 					continue
@@ -409,7 +434,7 @@ func (a *Simple) mergeObserveResults(ors []*common.ObserveResult) *common.Observ
 			if len(countries) == 0 {
 				continue
 			}
-			esp := es.Clone(e)
+			esp := es.Clone(oi)
 			esp.Countries = countries
 			es.Add(esp)
 		}
@@ -428,13 +453,13 @@ func (a *Simple) mergeObserveResults(ors []*common.ObserveResult) *common.Observ
 	}
 
 	return &common.ObserveResult{
-		Endpoints: r,
+		Items: r,
 	}
 }
 
 func (a *Simple) mergeVerifyResults(vrs []*common.VerifyResult) *common.VerifyResult {
 
-	vps := common.VerifyEndpoints{}
+	vps := common.VerifyItems{}
 
 	for _, vr := range vrs {
 
@@ -446,15 +471,20 @@ func (a *Simple) mergeVerifyResults(vrs []*common.VerifyResult) *common.VerifyRe
 			continue
 		}
 
-		es := &common.VerifyEndpoints{}
-		for _, e := range vr.Endpoints.Items() {
+		es := &common.VerifyItems{}
+		for _, entry := range vr.Items.Items() {
 
-			if e == nil {
+			if entry == nil {
+				continue
+			}
+
+			ve, ok := entry.(*common.VerifyItem)
+			if !ok {
 				continue
 			}
 
 			countries := make(common.VerifyCountries)
-			for k, s := range e.Countries {
+			for k, s := range ve.EntryVerifyCountries() {
 
 				if s == nil {
 					continue
@@ -474,7 +504,7 @@ func (a *Simple) mergeVerifyResults(vrs []*common.VerifyResult) *common.VerifyRe
 			if len(countries) == 0 {
 				continue
 			}
-			esp := es.Clone(e)
+			esp := es.Clone(ve)
 			esp.Countries = countries
 			es.Add(esp)
 		}
@@ -493,7 +523,7 @@ func (a *Simple) mergeVerifyResults(vrs []*common.VerifyResult) *common.VerifyRe
 	}
 
 	return &common.VerifyResult{
-		Endpoints: r,
+		Items: r,
 	}
 }
 
@@ -524,11 +554,11 @@ func (a *Simple) tryLoad() (*common.SourceResult, error) {
 		return nil, nil
 	}
 
-	for _, ep := range sr.Endpoints.Items() {
-		if ep == nil {
+	for _, entry := range sr.Items.Items() {
+		if entry == nil {
 			continue
 		}
-		a.logger.Debug("Simple %s detector source endpoint %s %s", a.options.Name, ep.URI, ep.Countries)
+		a.logger.Debug("Simple %s detector source item %s %s", a.options.Name, entry.EntryKey(), entry.EntryCountries())
 	}
 	return sr, nil
 }
@@ -550,15 +580,17 @@ func (a *Simple) tryObserve(sr *common.SourceResult) (*common.ObserveResult, err
 		return nil, nil
 	}
 
-	for _, ep := range or.Endpoints.Items() {
-		if ep == nil {
+	for _, entry := range or.Items.Items() {
+		if entry == nil {
 			continue
 		}
 		arr := []string{}
-		for k, v := range ep.Countries {
-			arr = append(arr, fmt.Sprintf("%s=%0.2f", k, *v))
+		for k, v := range entry.EntryObserveCountries() {
+			if v != nil {
+				arr = append(arr, fmt.Sprintf("%s=%0.2f", k, *v))
+			}
 		}
-		a.logger.Debug("Simple %s detector observed endpoint %s %s", a.options.Name, ep.URI, arr)
+		a.logger.Debug("Simple %s detector observed item %s %s", a.options.Name, entry.EntryKey(), arr)
 	}
 	return or, nil
 }
@@ -580,12 +612,12 @@ func (a *Simple) tryVerify(or *common.ObserveResult) (*common.VerifyResult, erro
 		return nil, nil
 	}
 
-	for _, ep := range vr.Endpoints.Items() {
-		if ep == nil {
+	for _, entry := range vr.Items.Items() {
+		if entry == nil {
 			continue
 		}
 		arr := []string{}
-		for k, s := range ep.Countries {
+		for k, s := range entry.EntryVerifyCountries() {
 			if s == nil {
 				continue
 			}
@@ -599,9 +631,11 @@ func (a *Simple) tryVerify(or *common.ObserveResult) (*common.VerifyResult, erro
 			if len(flags) > 0 {
 				sflags = fmt.Sprintf(":%s", flags)
 			}
-			arr = append(arr, fmt.Sprintf("%s=%0.2f%s", k, *s.Probability, sflags))
+			if s.Probability != nil {
+				arr = append(arr, fmt.Sprintf("%s=%0.2f%s", k, *s.Probability, sflags))
+			}
 		}
-		a.logger.Debug("Simple %s detector verified endpoint %s %s", a.options.Name, ep.URI, arr)
+		a.logger.Debug("Simple %s detector verified item %s %s", a.options.Name, entry.EntryKey(), arr)
 	}
 	return vr, nil
 }

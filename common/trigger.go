@@ -15,7 +15,7 @@ type TriggerOptions struct {
 type Triggers struct {
 	options *TriggerOptions
 	logger  sreCommon.Logger
-	cache   *ttlcache.Cache[string, *VerifyEndpoint]
+	cache   *ttlcache.Cache[string, *VerifyItem]
 }
 
 func (t *Triggers) Exists(key string) bool {
@@ -23,7 +23,7 @@ func (t *Triggers) Exists(key string) bool {
 	return t.cache.Has(key)
 }
 
-func (t *Triggers) Update(key string, ep *VerifyEndpoint) {
+func (t *Triggers) Update(key string, ep *VerifyItem) {
 
 	if ep == nil {
 		return
@@ -38,7 +38,7 @@ func NewTriggers(options *TriggerOptions, observability *Observability) *Trigger
 	}
 
 	logger := observability.Logs()
-	opts := []ttlcache.Option[string, *VerifyEndpoint]{}
+	opts := []ttlcache.Option[string, *VerifyItem]{}
 
 	ttl := 1 * 60 * 60 * time.Second
 
@@ -46,9 +46,9 @@ func NewTriggers(options *TriggerOptions, observability *Observability) *Trigger
 		ttl, _ = time.ParseDuration(options.TTL)
 	}
 
-	opts = append(opts, ttlcache.WithTTL[string, *VerifyEndpoint](ttl))
+	opts = append(opts, ttlcache.WithTTL[string, *VerifyItem](ttl))
 
-	cache := ttlcache.New[string, *VerifyEndpoint](opts...)
+	cache := ttlcache.New[string, *VerifyItem](opts...)
 	go cache.Start()
 
 	return &Triggers{

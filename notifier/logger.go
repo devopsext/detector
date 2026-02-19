@@ -23,23 +23,26 @@ func (s *Logger) Name() string {
 
 func (s *Logger) Notify(vr *common.VerifyResult) error {
 
-	if vr.Endpoints.IsEmpty() {
-		return errors.New("Logger notifier cannot process empty endpoints")
+	if vr.Items.IsEmpty() {
+		return errors.New("Logger notifier cannot process empty items")
 	}
 
-	for _, e := range vr.Endpoints.Items() {
+	for _, entry := range vr.Items.Items() {
 
-		if e == nil {
+		if entry == nil {
 			continue
 		}
 
-		uri := common.NormalizeURI(e.URI)
+		key := entry.EntryKey()
 
 		sum := float64(0.0)
 		countries := []string{}
 
-		for k, v := range e.Countries {
+		for k, v := range entry.EntryVerifyCountries() {
 
+			if v == nil {
+				continue
+			}
 			p := v.Probability
 			if p == nil {
 				continue
@@ -57,7 +60,7 @@ func (s *Logger) Notify(vr *common.VerifyResult) error {
 
 		avg := sum / float64(l)
 
-		s.logger.Info("Logger notifier endpoint %s in countries %s %0.2f%%", uri, countries, avg)
+		s.logger.Info("Logger notifier item %s in countries %s %0.2f%%", key, countries, avg)
 	}
 	return nil
 }

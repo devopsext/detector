@@ -28,25 +28,25 @@ func (rd *Random) Name() string {
 
 func (rd *Random) Observe(sr *common.SourceResult) (*common.ObserveResult, error) {
 
-	if sr.Endpoints.IsEmpty() {
-		return nil, errors.New("Random observer cannot process empty endpoints")
+	if sr.Items.IsEmpty() {
+		return nil, errors.New("Random observer cannot process empty items")
 	}
 
 	rd.logger.Debug("Random observer is processing...")
 	t1 := time.Now()
 
-	es := common.ObserveEndpoints{}
+	es := common.ObserveItems{}
 
-	for _, e := range sr.Endpoints.Items() {
+	for _, entry := range sr.Items.Items() {
 
-		if e == nil {
+		if entry == nil {
 			continue
 		}
 
-		uri := common.NormalizeURI(e.URI)
+		key := entry.EntryKey()
 		countries := make(common.ObserveCountries)
 
-		for _, c := range e.Countries {
+		for _, c := range entry.EntryCountries() {
 
 			value := rd.options.Min + rand.Float64()*(rd.options.Max-rd.options.Min)
 			country := common.NormalizeCountry(c)
@@ -59,19 +59,22 @@ func (rd *Random) Observe(sr *common.SourceResult) (*common.ObserveResult, error
 
 		time.Sleep(time.Duration(rd.options.Delay) * time.Millisecond)
 
-		e := &common.ObserveEndpoint{
-			URI:       uri,
+		ep := &common.ObserveItem{
+			Key:       key,
 			Countries: countries,
-			IPs:       e.IPs,
-			Response:  e.Response,
 		}
-		es.Add(e)
+		// domain-specific fields
+		if se, ok := entry.(*common.SourceItem); ok {
+			ep.IPs = se.IPs
+			ep.Response = se.Response
+		}
+		es.Add(ep)
 	}
 
 	rd.logger.Debug("Random observer spent %s", time.Since(t1))
 
 	r := &common.ObserveResult{
-		Endpoints: es,
+		Items: es,
 	}
 	return r, nil
 }

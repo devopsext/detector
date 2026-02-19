@@ -106,7 +106,7 @@ func (ps *PubSub) loadFiles(files string) {
 		if len(config.Endpoints) == 0 {
 			continue
 		}
-		es := common.CheckSourceEndpoints(config.Endpoints)
+		es := common.CheckSourceItems(config.Endpoints)
 		if len(es) == 0 {
 			continue
 		}
@@ -153,7 +153,7 @@ func (ps *PubSub) Start(ctx context.Context) error {
 			return
 		}
 
-		m := make(map[string][]*common.SourceEndpoint)
+		m := make(map[string][]*common.SourceItem)
 
 		for k, v := range pm.Payload {
 
@@ -180,12 +180,12 @@ func (ps *PubSub) Start(ctx context.Context) error {
 					continue
 				}
 
-				es := []*common.SourceEndpoint{}
+				es := []*common.SourceItem{}
 				err = json.Unmarshal(f.Data, &es)
 				if err != nil {
 					continue
 				}
-				es = common.CheckSourceEndpoints(es)
+				es = common.CheckSourceItems(es)
 				if len(es) > 0 {
 					path := ps.replace(f.Path)
 					m[path] = es
@@ -201,12 +201,12 @@ func (ps *PubSub) Start(ctx context.Context) error {
 				}
 
 				for _, f := range fs {
-					es := []*common.SourceEndpoint{}
+					es := []*common.SourceItem{}
 					err = json.Unmarshal(f.Data, &es)
 					if err != nil {
 						continue
 					}
-					es = common.CheckSourceEndpoints(es)
+					es = common.CheckSourceItems(es)
 					if len(es) == 0 {
 						continue
 					}
@@ -238,20 +238,22 @@ func (ps *PubSub) Start(ctx context.Context) error {
 
 func (ps *PubSub) Load() (*common.SourceResult, error) {
 
-	es := common.SourceEndpoints{}
+	es := common.SourceItems{}
 
 	ps.smap.Range(func(key, value any) bool {
 
-		arr, ok := value.([]*common.SourceEndpoint)
+		arr, ok := value.([]*common.SourceItem)
 		if !ok {
 			return false
 		}
-		es.Add(arr...)
+		for _, ep := range arr {
+			es.Add(ep)
+		}
 		return true
 	})
 
 	r := &common.SourceResult{
-		Endpoints: es,
+		Items: es,
 	}
 	return r, nil
 }
