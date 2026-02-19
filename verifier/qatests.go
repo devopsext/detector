@@ -244,7 +244,7 @@ func (q *QATests) processQATestResultsSummary(oi *common.ObserveItem, results *[
 	var rs []QATestsSummary
 
 	for _, r := range *results {
-		// Вычисляем availability на основе exitcode
+		// Calculate availability based on exitcode
 		availability := float64(0.0)
 		if len(r.Tasks) > 0 {
 			task := r.Tasks[0]

@@ -1,20 +1,21 @@
 package common
 
-// Entry — базовый интерфейс любого объекта мониторинга.
+// Entry is the base interface for any monitoring object.
 //
-// Примеры EntryKey():
-//   домены:   "domain.com"          (NormalizeURI(URI) если Key пустой)
-//   BP:       "deposit"             (из поля Key)
-//   Frontend: "web-trader:panel"    (из поля Key)
+// EntryKey() examples:
 //
-// Методы называются EntryKey/EntryIdent (не Key/Ident): Go запрещает одновременно
-// иметь поле Key string и метод Key() string в одной структуре.
+//	domains:   "domain.com"          (NormalizeURI(URI) when Key is empty)
+//	BP:        "deposit"             (from Key field)
+//	Frontend:  "web-trader:panel"    (from Key field)
+//
+// Methods are named EntryKey/EntryIdent (not Key/Ident) because Go does not allow
+// a struct to have both a field `Key string` and a method `Key() string`.
 type Entry interface {
-	EntryKey() string   // primary key группировки и триггеров
-	EntryIdent() string // human-readable (EntryKey + [sorted countries])
+	EntryKey() string   // primary key used for grouping and triggers
+	EntryIdent() string // human-readable identifier (EntryKey + [sorted countries])
 }
 
-// SourceEntry — сущность из источника данных (домен, BP, Frontend и др.)
+// SourceEntry represents an entity from a data source (domain, BP, Frontend, etc.)
 type SourceEntry interface {
 	Entry
 	EntryCountries() []string
@@ -22,13 +23,13 @@ type SourceEntry interface {
 	EntryDetectors() []string
 }
 
-// ObserveEntry — сущность после наблюдения (с probability по странам).
+// ObserveEntry represents an entity after observation (with per-country probabilities).
 type ObserveEntry interface {
 	Entry
 	EntryObserveCountries() ObserveCountries // map[string]*ObserveProbability
 }
 
-// VerifyEntry — сущность после верификации (с флагами и вероятностями по странам).
+// VerifyEntry represents an entity after verification (with per-country flags and probabilities).
 type VerifyEntry interface {
 	Entry
 	EntryVerifyCountries() VerifyCountries // map[string]*VerifyStatus

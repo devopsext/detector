@@ -32,7 +32,7 @@ type DatadogOptions struct {
 }
 
 type DatadogMetricSummary struct {
-	Key     string // primary key (tag value: URI для доменов, process name для BP и т.д.)
+	Key     string // primary key (tag value: URI for domains, process name for BP, etc.)
 	Country string
 	Avg     float64
 	Min     float64
@@ -362,7 +362,7 @@ func (d *Datadog) Observe(sr *common.SourceResult) (*common.ObserveResult, error
 
 	d.logger.Debug("Datadog observer is processing...")
 
-	// Record observer start in metrics - один запрос для всех доменов
+	// Record observer start in metrics - single request for all domains
 	if d.metrics != nil {
 		d.metrics.RecordTestStartByType("observer", "datadog", "datadog_api", "all")
 	}
@@ -477,8 +477,8 @@ func (d *Datadog) Observe(sr *common.SourceResult) (*common.ObserveResult, error
 		Items: es,
 	}
 
-	// HTTP запрос к Datadog API уже залогирован выше
-	// Здесь больше не логируем метрики для каждого домена/страны
+	// HTTP request to Datadog API is already logged above
+	// No longer logging metrics for each domain/country here
 
 	return r, nil
 }

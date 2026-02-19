@@ -147,7 +147,7 @@ var verifierHttp = verifier.HttpOptions{
 
 var verifierQATests = verifier.QATestsOptions{
 	URL:              envGet("VERIFIER_QATESTS_URL", "").(string),
-	Timeout:          envGet("VERIFIER_QATESTS_TIMEOUT", 400).(int), // Больше чем TestTimeout + буфер
+	Timeout:          envGet("VERIFIER_QATESTS_TIMEOUT", 400).(int), // Must be greater than TestTimeout + buffer
 	Insecure:         envGet("VERIFIER_QATESTS_INSECURE", false).(bool),
 	BusinessProcess:  envGet("VERIFIER_QATESTS_BUSINESS_PROCESS", "").(string),
 	AllureProjectId:  envGet("VERIFIER_QATESTS_ALLURE_PROJECT_ID", "").(string),

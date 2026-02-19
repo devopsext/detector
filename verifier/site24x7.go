@@ -547,7 +547,7 @@ func (s *Site24x7) processLogReportSummary(oi *common.ObserveItem, locations *ve
 			Flags:   flags,
 		})
 
-		// Метрика probability теперь записывается в Verify для каждой страны отдельно
+		// Probability metric is now recorded in Verify for each country separately
 	}
 	return r
 }

@@ -87,7 +87,7 @@ func (s *Slack) Notify(vr *common.VerifyResult) error {
 
 	s.logger.Debug("Slack notifier is processing...")
 
-	// Record notification start in metrics - один API вызов для всех уведомлений
+	// Record notification start in metrics - single API call for all notifications
 	if s.metrics != nil {
 		s.metrics.RecordTestStartByType("notifier", "slack", "slack_api", "all")
 	}

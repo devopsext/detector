@@ -29,8 +29,8 @@ type VerifyStatus struct {
 type VerifyCountries = map[string]*VerifyStatus
 
 type VerifyItem struct {
-	Key       string         `json:"key,omitempty"` // primary key
-	URI       string         `json:"uri,omitempty"` // backward compat для доменов
+	Key       string `json:"key,omitempty"` // primary key
+	URI       string `json:"uri,omitempty"` // backward compat for domains
 	Countries VerifyCountries
 }
 

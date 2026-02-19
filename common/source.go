@@ -14,13 +14,13 @@ type SourceItemResponse struct {
 }
 
 type SourceItem struct {
-	Key       string               `json:"key,omitempty"`  // универсальный primary key (BP: "deposit", Frontend: "web-trader:panel")
-	URI       string               `json:"uri,omitempty"` // домен (backward compat)
-	Disabled  bool                 `json:"disabled"`
-	Countries []string             `json:"countries,omitempty"`
-	IPs       []string             `json:"ips,omitempty"`
-	Detectors []string             `json:"detectors,omitempty"`
-	Response  *SourceItemResponse   `json:"response,omitempty"`
+	Key       string              `json:"key,omitempty"` // universal primary key (BP: "deposit", Frontend: "web-trader:panel")
+	URI       string              `json:"uri,omitempty"` // domain (backward compat)
+	Disabled  bool                `json:"disabled"`
+	Countries []string            `json:"countries,omitempty"`
+	IPs       []string            `json:"ips,omitempty"`
+	Detectors []string            `json:"detectors,omitempty"`
+	Response  *SourceItemResponse `json:"response,omitempty"`
 }
 
 // EntryKey returns the primary grouping key.

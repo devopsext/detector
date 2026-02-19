@@ -14,7 +14,7 @@ type ObserveProbability = float64
 type ObserveCountries = map[string]*ObserveProbability
 
 type ObserveItem struct {
-	Key       string `json:"key,omitempty"` // primary key (значение DataDog тега, домен и т.д.)
+	Key       string `json:"key,omitempty"` // primary key (DataDog tag value, domain, etc.)
 	Countries ObserveCountries
 	IPs       []string
 	Response  *SourceItemResponse
