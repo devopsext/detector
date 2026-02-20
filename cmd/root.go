@@ -207,6 +207,24 @@ var detectorSimple = DetectorSimpleOptions{
 	Notifiers: envGet("SIMPLE_NOTIFIERS", "").(string),
 }
 
+var detectorApp = DetectorSimpleOptions{
+	Sources:   envGet("APP_SOURCES", "").(string),
+	Schedules: envGet("APP_SCHEDULES", "").(string),
+	Countries: envGet("APP_COUNTRIES", "").(string),
+	Observers: envGet("APP_OBSERVERS", "").(string),
+	Verifiers: envGet("APP_VERIFIERS", "").(string),
+	Notifiers: envGet("APP_NOTIFIERS", "").(string),
+}
+
+var detectorProcess = DetectorSimpleOptions{
+	Sources:   envGet("PROCESS_SOURCES", "").(string),
+	Schedules: envGet("PROCESS_SCHEDULES", "").(string),
+	Countries: envGet("PROCESS_COUNTRIES", "").(string),
+	Observers: envGet("PROCESS_OBSERVERS", "").(string),
+	Verifiers: envGet("PROCESS_VERIFIERS", "").(string),
+	Notifiers: envGet("PROCESS_NOTIFIERS", "").(string),
+}
+
 func getOnlyEnv(key string) string {
 	value, ok := os.LookupEnv(key)
 	if ok {
@@ -346,6 +364,168 @@ func getSimpleDetectors(obs *common.Observability, triggers *common.Triggers,
 	return r
 }
 
+func getApplicationDetectors(obs *common.Observability, triggers *common.Triggers,
+	allSources *common.Sources, allObservers *common.Observers,
+	allVerifiers *common.Verifiers, allNotifiers *common.Notifiers) []common.Detector {
+
+	r := []common.Detector{}
+
+	logger := obs.Logs()
+	sourceKVs := utils.MapGetKeyValues(detectorApp.Sources)
+
+	for k, v := range sourceKVs {
+
+		if utils.IsEmpty(k) || utils.IsEmpty(v) {
+			continue
+		}
+
+		sm := []common.Source{}
+		vKeys := strings.Split(v, ";")
+		for _, vk := range vKeys {
+			vk = strings.TrimSpace(vk)
+			if utils.IsEmpty(vk) {
+				continue
+			}
+			s := allSources.FindByName(vk)
+			if !utils.IsEmpty(s) {
+				sm = append(sm, s)
+			}
+		}
+		if len(sm) == 0 {
+			sm = allSources.Items()
+		}
+
+		schedule := "30s"
+		if sv := utils.MapGetKeyValues(detectorApp.Schedules)[k]; !utils.IsEmpty(sv) {
+			schedule = sv
+		}
+
+		countriesCfg := utils.MapGetKeyValues(detectorApp.Countries)[k]
+		countries := common.NormalizeCountries(strings.Split(countriesCfg, ";"))
+
+		observerCfg := strings.ToLower(utils.MapGetKeyValues(detectorApp.Observers)[k])
+		observers := allObservers.FindConfigurationByPattern(observerCfg)
+		if len(observers) == 0 {
+			logger.Debug("Boot couldn't find observers for application detector %s", k)
+			continue
+		}
+
+		verifierCfg := strings.ToLower(utils.MapGetKeyValues(detectorApp.Verifiers)[k])
+		verifiers := allVerifiers.FindConfigurationByPattern(verifierCfg)
+		if len(verifiers) == 0 {
+			logger.Debug("Boot couldn't find verifiers for application detector %s", k)
+			continue
+		}
+
+		notifierCfg := strings.ToLower(utils.MapGetKeyValues(detectorApp.Notifiers)[k])
+		notifiers := allNotifiers.FindConfigurationByPattern(notifierCfg)
+		if len(notifiers) == 0 {
+			logger.Debug("Boot couldn't find notifiers for application detector %s", k)
+			continue
+		}
+
+		opts := detector.ApplicationOptions{
+			Name:                   k,
+			Schedule:               schedule,
+			Triggers:               triggers,
+			Sources:                sm,
+			Countries:              countries,
+			ObserverConfigurations: observers,
+			VerifierConfigurations: verifiers,
+			NotifierConfigurations: notifiers,
+		}
+
+		d := detector.NewApplication(&opts, obs)
+		if utils.IsEmpty(d) {
+			continue
+		}
+		r = append(r, d)
+	}
+
+	return r
+}
+
+func getProcessDetectors(obs *common.Observability, triggers *common.Triggers,
+	allSources *common.Sources, allObservers *common.Observers,
+	allVerifiers *common.Verifiers, allNotifiers *common.Notifiers) []common.Detector {
+
+	r := []common.Detector{}
+
+	logger := obs.Logs()
+	sourceKVs := utils.MapGetKeyValues(detectorProcess.Sources)
+
+	for k, v := range sourceKVs {
+
+		if utils.IsEmpty(k) || utils.IsEmpty(v) {
+			continue
+		}
+
+		sm := []common.Source{}
+		vKeys := strings.Split(v, ";")
+		for _, vk := range vKeys {
+			vk = strings.TrimSpace(vk)
+			if utils.IsEmpty(vk) {
+				continue
+			}
+			s := allSources.FindByName(vk)
+			if !utils.IsEmpty(s) {
+				sm = append(sm, s)
+			}
+		}
+		if len(sm) == 0 {
+			sm = allSources.Items()
+		}
+
+		schedule := "30s"
+		if sv := utils.MapGetKeyValues(detectorProcess.Schedules)[k]; !utils.IsEmpty(sv) {
+			schedule = sv
+		}
+
+		countriesCfg := utils.MapGetKeyValues(detectorProcess.Countries)[k]
+		countries := common.NormalizeCountries(strings.Split(countriesCfg, ";"))
+
+		observerCfg := strings.ToLower(utils.MapGetKeyValues(detectorProcess.Observers)[k])
+		observers := allObservers.FindConfigurationByPattern(observerCfg)
+		if len(observers) == 0 {
+			logger.Debug("Boot couldn't find observers for process detector %s", k)
+			continue
+		}
+
+		verifierCfg := strings.ToLower(utils.MapGetKeyValues(detectorProcess.Verifiers)[k])
+		verifiers := allVerifiers.FindConfigurationByPattern(verifierCfg)
+		if len(verifiers) == 0 {
+			logger.Debug("Boot couldn't find verifiers for process detector %s", k)
+			continue
+		}
+
+		notifierCfg := strings.ToLower(utils.MapGetKeyValues(detectorProcess.Notifiers)[k])
+		notifiers := allNotifiers.FindConfigurationByPattern(notifierCfg)
+		if len(notifiers) == 0 {
+			logger.Debug("Boot couldn't find notifiers for process detector %s", k)
+			continue
+		}
+
+		opts := detector.ProcessOptions{
+			Name:                   k,
+			Schedule:               schedule,
+			Triggers:               triggers,
+			Sources:                sm,
+			Countries:              countries,
+			ObserverConfigurations: observers,
+			VerifierConfigurations: verifiers,
+			NotifierConfigurations: notifiers,
+		}
+
+		d := detector.NewProcess(&opts, obs)
+		if utils.IsEmpty(d) {
+			continue
+		}
+		r = append(r, d)
+	}
+
+	return r
+}
+
 func interceptSyscall() {
 
 	c := make(chan os.Signal, 1)
@@ -412,6 +592,8 @@ func Execute() {
 
 			detectors := common.NewDetectors(&detectorOptions, obs)
 			detectors.Add(getSimpleDetectors(obs, triggers, sources, observers, verifiers, notifiers)...)
+			detectors.Add(getApplicationDetectors(obs, triggers, sources, observers, verifiers, notifiers)...)
+			detectors.Add(getProcessDetectors(obs, triggers, sources, observers, verifiers, notifiers)...)
 
 			detectors.Start(rootOptions.RunOnce, rootOptions.SchedulerWait, ctx)
 
@@ -519,6 +701,20 @@ func Execute() {
 	flags.StringVar(&detectorSimple.Observers, "detector-simple-observers", detectorSimple.Observers, "Detector simple observers")
 	flags.StringVar(&detectorSimple.Verifiers, "detector-simple-verifiers", detectorSimple.Verifiers, "Detector simple verifiers")
 	flags.StringVar(&detectorSimple.Notifiers, "detector-simple-notifiers", detectorSimple.Notifiers, "Detector simple notifiers")
+
+	flags.StringVar(&detectorApp.Sources, "detector-app-sources", detectorApp.Sources, "Detector application sources")
+	flags.StringVar(&detectorApp.Schedules, "detector-app-schedules", detectorApp.Schedules, "Detector application schedules")
+	flags.StringVar(&detectorApp.Countries, "detector-app-countries", detectorApp.Countries, "Detector application countries")
+	flags.StringVar(&detectorApp.Observers, "detector-app-observers", detectorApp.Observers, "Detector application observers")
+	flags.StringVar(&detectorApp.Verifiers, "detector-app-verifiers", detectorApp.Verifiers, "Detector application verifiers")
+	flags.StringVar(&detectorApp.Notifiers, "detector-app-notifiers", detectorApp.Notifiers, "Detector application notifiers")
+
+	flags.StringVar(&detectorProcess.Sources, "detector-process-sources", detectorProcess.Sources, "Detector process sources")
+	flags.StringVar(&detectorProcess.Schedules, "detector-process-schedules", detectorProcess.Schedules, "Detector process schedules")
+	flags.StringVar(&detectorProcess.Countries, "detector-process-countries", detectorProcess.Countries, "Detector process countries")
+	flags.StringVar(&detectorProcess.Observers, "detector-process-observers", detectorProcess.Observers, "Detector process observers")
+	flags.StringVar(&detectorProcess.Verifiers, "detector-process-verifiers", detectorProcess.Verifiers, "Detector process verifiers")
+	flags.StringVar(&detectorProcess.Notifiers, "detector-process-notifiers", detectorProcess.Notifiers, "Detector process notifiers")
 
 	flags.IntVar(&detectorOptions.StartTimeout, "start-timeout", detectorOptions.StartTimeout, "Detector start timeout")
 
