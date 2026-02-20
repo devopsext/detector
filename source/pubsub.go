@@ -19,6 +19,7 @@ import (
 	"google.golang.org/api/option"
 )
 
+// PubSubOptions holds configuration for the PubSub source.
 type PubSubOptions struct {
 	Credentials  string
 	Project      string
@@ -30,6 +31,8 @@ type PubSubOptions struct {
 	Replacements string
 }
 
+// PubSub is a Google Cloud PubSub-based Source implementation.
+// smap stores: path → []*common.SourceEntry (new catalog format).
 type PubSub struct {
 	options      *PubSubOptions
 	logger       sreCommon.Logger
@@ -45,7 +48,6 @@ func (ps *PubSub) Name() string {
 }
 
 func (ps *PubSub) replace(s string) string {
-
 	r := s
 	for k, v := range ps.replacements {
 		r = strings.Replace(r, k, v, 1)
@@ -54,17 +56,14 @@ func (ps *PubSub) replace(s string) string {
 }
 
 func (ps *PubSub) decompress(pl *discovery.PubSubMessagePayload) ([]byte, error) {
-
 	var data []byte
 	switch pl.Compression {
 	case discovery.PubSubMessagePayloadCompressionGZip:
-
 		buf := bytes.NewReader(pl.Data)
 		zr, err := gzip.NewReader(buf)
 		if err != nil {
 			return nil, err
 		}
-
 		d, err := io.ReadAll(zr)
 		if err != nil {
 			return nil, err
@@ -76,6 +75,7 @@ func (ps *PubSub) decompress(pl *discovery.PubSubMessagePayload) ([]byte, error)
 	return data, nil
 }
 
+// loadFiles loads catalog entries from files matching the given glob pattern.
 func (ps *PubSub) loadFiles(files string) {
 
 	ps.logger.Debug("PubSub source is loading files from %s...", files)
@@ -98,22 +98,21 @@ func (ps *PubSub) loadFiles(files string) {
 			continue
 		}
 
-		var config ConfigFile
-		err = json.Unmarshal(data, &config)
-		if err != nil {
+		var entries []*common.SourceEntry
+		if err := json.Unmarshal(data, &entries); err != nil {
+			ps.logger.Debug("PubSub source couldn't parse file %s as SourceEntry array, error: %s", item, err)
 			continue
 		}
-		if len(config.Endpoints) == 0 {
+
+		if len(entries) == 0 {
 			continue
 		}
-		es := common.CheckSourceEndpoints(config.Endpoints)
-		if len(es) == 0 {
-			continue
-		}
-		ps.smap.Store(item, es)
+
+		ps.smap.Store(item, entries)
 	}
 }
 
+// Start initialises the PubSub subscription and starts receiving messages.
 func (ps *PubSub) Start(ctx context.Context) error {
 
 	if !utils.IsEmpty(ps.options.ConfigFiles) {
@@ -146,21 +145,20 @@ func (ps *PubSub) Start(ctx context.Context) error {
 	err = sub.Receive(ctx, func(rctx context.Context, msg *pubsub.Message) {
 
 		var pm discovery.PubSubMessage
-		err := json.Unmarshal(msg.Data, &pm)
-		if err != nil {
+		if err := json.Unmarshal(msg.Data, &pm); err != nil {
 			msg.Nack()
 			ps.logger.Error("PubSub source couldn't unmarshal from %s error: %s", subID, err)
 			return
 		}
 
-		m := make(map[string][]*common.SourceEndpoint)
+		m := make(map[string][]*common.SourceEntry)
 
 		for k, v := range pm.Payload {
 
 			ps.logger.Debug("PubSub source is processing payload %s from %s", k, subID)
 
 			if v.Kind == discovery.PubSubMessagePayloadKindUnknown {
-				ps.logger.Error("PubSub source couldn't process unknown payload %s from %s error: %s", k, subID, err)
+				ps.logger.Error("PubSub source couldn't process unknown payload %s from %s", k, subID)
 				continue
 			}
 
@@ -174,44 +172,39 @@ func (ps *PubSub) Start(ctx context.Context) error {
 			case discovery.PubSubMessagePayloadKindFile:
 
 				var f discovery.PubSubMessagePayloadFile
-				err := json.Unmarshal(data, &f)
-				if err != nil {
+				if err := json.Unmarshal(data, &f); err != nil {
 					ps.logger.Error("PubSub source couldn't unmarshall payload %s from %s to file error: %s", k, subID, err)
 					continue
 				}
 
-				es := []*common.SourceEndpoint{}
-				err = json.Unmarshal(f.Data, &es)
-				if err != nil {
+				path := ps.replace(f.Path)
+
+				var entries []*common.SourceEntry
+				if err := json.Unmarshal(f.Data, &entries); err != nil {
 					continue
 				}
-				es = common.CheckSourceEndpoints(es)
-				if len(es) > 0 {
-					path := ps.replace(f.Path)
-					m[path] = es
+				if len(entries) > 0 {
+					m[path] = entries
 				}
 
 			case discovery.PubSubMessagePayloadKindFiles:
 
 				var fs []*discovery.PubSubMessagePayloadFile
-				err := json.Unmarshal(data, &fs)
-				if err != nil {
+				if err := json.Unmarshal(data, &fs); err != nil {
 					ps.logger.Error("PubSub source couldn't unmarshall payload %s from %s to files error: %s", k, subID, err)
 					continue
 				}
 
 				for _, f := range fs {
-					es := []*common.SourceEndpoint{}
-					err = json.Unmarshal(f.Data, &es)
-					if err != nil {
-						continue
-					}
-					es = common.CheckSourceEndpoints(es)
-					if len(es) == 0 {
-						continue
-					}
 					path := ps.replace(f.Path)
-					m[path] = es
+					var entries []*common.SourceEntry
+					if err := json.Unmarshal(f.Data, &entries); err != nil {
+						continue
+					}
+					if len(entries) == 0 {
+						continue
+					}
+					m[path] = entries
 				}
 
 			case discovery.PubSubMessagePayloadKindUnknown:
@@ -236,24 +229,21 @@ func (ps *PubSub) Start(ctx context.Context) error {
 	return nil
 }
 
+// Load collects all stored SourceEntry items and routes them into a SourceResult.
 func (ps *PubSub) Load() (*common.SourceResult, error) {
 
-	es := common.SourceEndpoints{}
+	var all []*common.SourceEntry
 
 	ps.smap.Range(func(key, value any) bool {
-
-		arr, ok := value.([]*common.SourceEndpoint)
+		entries, ok := value.([]*common.SourceEntry)
 		if !ok {
-			return false
+			return true
 		}
-		es.Add(arr...)
+		all = append(all, entries...)
 		return true
 	})
 
-	r := &common.SourceResult{
-		Endpoints: es,
-	}
-	return r, nil
+	return common.RouteEntries(all), nil
 }
 
 func NewPubSub(options *PubSubOptions, observability *common.Observability, ctx context.Context) *PubSub {
