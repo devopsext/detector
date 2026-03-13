@@ -250,15 +250,25 @@ func (c *Chatops) buildCommand(vr *common.VerifyDefaultResult) (string, error) {
 	return fmt.Sprintf("anomaly %s", string(data)), nil
 }
 
+func isEmptyLabel(v string) bool {
+	if v == "" {
+		return true
+	}
+	norm := strings.ToLower(strings.TrimSpace(v))
+	return norm == "n/a" || norm == "na" || norm == "none" || norm == "null" || norm == "undefined"
+}
+
 func buildSummaryFromLabels(labels map[string]string, value float64) string {
 
 	keys := make([]string, 0, len(labels))
 	for k := range labels {
-		keys = append(keys, k)
+		if !isEmptyLabel(labels[k]) {
+			keys = append(keys, k)
+		}
 	}
 	sort.Strings(keys)
 
-	parts := make([]string, 0, len(labels)+1)
+	parts := make([]string, 0, len(keys)+1)
 	for _, k := range keys {
 		parts = append(parts, fmt.Sprintf("%s=%s", k, labels[k]))
 	}

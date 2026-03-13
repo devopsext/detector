@@ -180,8 +180,12 @@ func (d *Default) verify(out *common.ObserveDefaultOutput) (*common.VerifyDefaul
 	return &common.VerifyDefaultResult{Items: allItems}, nil
 }
 
-// recover clears memory entries for metrics that have recovered (item.Passed == true).
-// Approved entries are kept in memory with NoTTL until the metric goes above threshold again.
+// recover transitions memory entries for recovered metrics:
+//   - Approved → Recovering (with TTL) to protect against flapping
+//   - Recovering entries are left alone — they will be auto-removed when TTL expires
+//
+// A metric is considered recovered when item.Passed == true or its value is
+// at or above the notifier's warning/alert threshold.
 func (d *Default) recover(vr *common.VerifyDefaultResult) {
 
 	mem := d.options.Memory
@@ -190,15 +194,34 @@ func (d *Default) recover(vr *common.VerifyDefaultResult) {
 	}
 
 	for _, nc := range d.options.NotifierDefaultConfigs {
+		threshold := nc.ThresholdWarning
+		if threshold == 0 {
+			threshold = nc.ThresholdAlert
+		}
+
 		for _, item := range vr.Items {
-			if item == nil || !item.Passed {
+			if item == nil {
 				continue
 			}
+
+			recovered := item.Passed || (threshold > 0 && item.Value >= threshold)
+			if !recovered {
+				continue
+			}
+
 			key := d.triggerKey(nc.Notifier, item.Labels)
 			entry := mem.Get(key)
-			if entry != nil && entry.State == common.MemoryStateApproved {
-				mem.Delete(key)
-				d.logger.Info("Default %s: metric recovered, clearing memory for %s", d.Name(), key)
+			if entry == nil {
+				continue
+			}
+
+			switch entry.State {
+			case common.MemoryStateApproved:
+				mem.StartRecovery(key)
+				d.logger.Info("Default %s: metric recovering (value=%.2f, threshold=%.2f), starting TTL for %s",
+					d.Name(), item.Value, threshold, key)
+			case common.MemoryStateRecovering:
+				d.logger.Debug("Default %s: metric still recovering, waiting TTL for %s", d.Name(), key)
 			}
 		}
 	}
@@ -228,6 +251,11 @@ func (d *Default) notify(vr *common.VerifyDefaultResult) error {
 			if mem != nil {
 				entry := mem.Get(key)
 				if entry != nil {
+					if entry.State == common.MemoryStateRecovering {
+						mem.Approve(key)
+						d.logger.Info("Default %s: metric degraded again, cancelling recovery for %s", d.Name(), key)
+						continue
+					}
 					if isTrackable && entry.MessageID != "" {
 						status, err := trackable.CheckMessageStatus(entry.MessageID)
 						if err != nil {
@@ -236,8 +264,25 @@ func (d *Default) notify(vr *common.VerifyDefaultResult) error {
 						}
 						switch status {
 						case "approved", "delivered":
-							mem.Approve(key)
-							d.logger.Debug("Default %s: message approved for %s, skipping", d.Name(), key)
+							if !entry.Escalated {
+								escalated := *item
+								escalated.Severity = "alert"
+								escalateResult := &common.VerifyDefaultResult{
+									Items: []*common.VerifyDefaultItem{&escalated},
+								}
+								tracking, err := trackable.NotifyDefaultWithTracking(escalateResult)
+								if err != nil {
+									d.logger.Error("Default %s: case daily escalation failed for %s: %s", d.Name(), key, err)
+									mem.Approve(key)
+								} else if len(tracking) > 0 {
+									mem.Escalate(key, tracking[0].MessageID)
+									d.logger.Info("Default %s: anomaly approved, escalated to case daily for %s, new msgID: %s",
+										d.Name(), key, tracking[0].MessageID)
+								}
+							} else {
+								mem.Approve(key)
+								d.logger.Info("Default %s: case daily delivered for %s, marking approved", d.Name(), key)
+							}
 							continue
 						case "rejected", "not_found", "failed":
 							mem.Delete(key)

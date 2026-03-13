@@ -11,8 +11,9 @@ import (
 type MemoryState string
 
 const (
-	MemoryStateSent     MemoryState = "sent"
-	MemoryStateApproved MemoryState = "approved"
+	MemoryStateSent       MemoryState = "sent"
+	MemoryStateApproved   MemoryState = "approved"
+	MemoryStateRecovering MemoryState = "recovering"
 )
 
 type MemoryEntry struct {
@@ -20,6 +21,7 @@ type MemoryEntry struct {
 	NotifierName string
 	State        MemoryState
 	SentAt       time.Time
+	Escalated    bool
 }
 
 type MemoryOptions struct {
@@ -61,6 +63,30 @@ func (m *Memory) Approve(key string) {
 	}
 	entry := item.Value()
 	entry.State = MemoryStateApproved
+	m.cache.Set(key, entry, ttlcache.NoTTL)
+}
+
+func (m *Memory) StartRecovery(key string) {
+
+	item := m.cache.Get(key)
+	if item == nil {
+		return
+	}
+	entry := item.Value()
+	entry.State = MemoryStateRecovering
+	m.cache.Set(key, entry, m.defaultTTL)
+}
+
+func (m *Memory) Escalate(key, messageID string) {
+
+	item := m.cache.Get(key)
+	if item == nil {
+		return
+	}
+	entry := item.Value()
+	entry.MessageID = messageID
+	entry.Escalated = true
+	entry.State = MemoryStateSent
 	m.cache.Set(key, entry, ttlcache.NoTTL)
 }
 
