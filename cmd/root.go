@@ -64,6 +64,10 @@ var sourceConfig = source.ConfigOptions{
 	Path: envGet("SOURCE_CONFIG_PATH", "").(string),
 }
 
+var sourceYaml = source.YamlOptions{
+	Path: envGet("SOURCE_YAML_PATH", "").(string),
+}
+
 var sourcePubSub = source.PubSubOptions{
 	Credentials:  envGet("SOURCE_PUBSUB_CREDENTIALS", "").(string),
 	Topic:        envGet("SOURCE_PUBSUB_TOPIC", "").(string),
@@ -181,8 +185,21 @@ var notifierSlack = notifier.SlackOptions{
 	Runbooks: envFileContentExpand("NOTIFIER_SLACK_RUNBOOKS", ""),
 }
 
+var notifierChatops = notifier.ChatopsOptions{
+	URL:      envGet("NOTIFIER_CHATOPS_URL", "").(string),
+	Bot:      envGet("NOTIFIER_CHATOPS_BOT", "Slack").(string),
+	Channel:  envGet("NOTIFIER_CHATOPS_CHANNEL", "").(string),
+	UserID:   envGet("NOTIFIER_CHATOPS_USER_ID", "").(string),
+	Timeout:  envGet("NOTIFIER_CHATOPS_TIMEOUT", 30).(int),
+	Insecure: envGet("NOTIFIER_CHATOPS_INSECURE", false).(bool),
+}
+
 var triggerOptions = common.TriggerOptions{
 	TTL: envGet("TRIGGER_TTL", "").(string),
+}
+
+var memoryOptions = common.MemoryOptions{
+	TTL: envGet("MEMORY_TTL", "").(string),
 }
 
 var detectorOptions = common.DetectorOptions{
@@ -233,6 +250,133 @@ func envFileContentExpand(s string, def string) string {
 	return os.Expand(string(bytes), getOnlyEnv)
 }
 
+// getDefaultDetectors initializes Default pipeline detectors from a V3 YAML configuration.
+// It matches observer, verifier and notifier names from YAML to registered implementations.
+func getDefaultDetectors(obs *common.Observability, triggers *common.Triggers, memory *common.Memory,
+	yamlSrc *source.Yaml, allObservers *common.Observers,
+	allVerifiers *common.Verifiers, allNotifiers *common.Notifiers) []common.Detector {
+
+	r := []common.Detector{}
+	logger := obs.Logs()
+
+	result, err := yamlSrc.Load()
+	if err != nil {
+		logger.Error("Default pipeline: cannot load YAML config: %s", err)
+		return r
+	}
+	if result == nil {
+		return r
+	}
+
+	// Build a name → ObserverDefault map from all registered observers
+	observerDefaultMap := map[string]common.ObserverDefault{}
+	for _, o := range allObservers.Items() {
+		if od, ok := o.(common.ObserverDefault); ok {
+			observerDefaultMap[strings.ToLower(o.Name())] = od
+		}
+	}
+
+	// Build a name → VerifierDefaultInterface map from all registered verifiers
+	verifierDefaultMap := map[string]common.VerifierDefaultInterface{}
+	for _, v := range allVerifiers.Items() {
+		if vd, ok := v.(common.VerifierDefaultInterface); ok {
+			verifierDefaultMap[strings.ToLower(v.Name())] = vd
+		}
+	}
+
+	// Build a name → NotifierDefault map from all registered notifiers
+	notifierDefaultMap := map[string]common.NotifierDefault{}
+	for _, n := range allNotifiers.Items() {
+		if nd, ok := n.(common.NotifierDefault); ok {
+			notifierDefaultMap[strings.ToLower(n.Name())] = nd
+		}
+	}
+
+	for _, dcfg := range result.Detectors {
+
+		if dcfg == nil {
+			continue
+		}
+		if !strings.EqualFold(dcfg.DetectorType, detector.DefaultDetectorType) {
+			logger.Debug("Default pipeline: detector %s has type %s — skipping (not Default)", dcfg.Name, dcfg.DetectorType)
+			continue
+		}
+
+		// Resolve observer configs and ObserverDefault instances by name
+		var observerCfgs []*common.ObserverConfig
+		var observerDefaults []common.ObserverDefault
+		for _, obsName := range dcfg.Observers {
+			for _, ocfg := range result.Observers {
+				if strings.EqualFold(ocfg.Name, obsName) {
+					observerCfgs = append(observerCfgs, ocfg)
+					if od, ok := observerDefaultMap[strings.ToLower(ocfg.Name)]; ok {
+						observerDefaults = append(observerDefaults, od)
+					} else {
+						logger.Debug("Default pipeline: observer implementation %s not found for detector %s", obsName, dcfg.Name)
+					}
+					break
+				}
+			}
+		}
+
+		if len(observerDefaults) == 0 {
+			logger.Debug("Default pipeline: detector %s has no valid observers, skipping", dcfg.Name)
+			continue
+		}
+
+		// Resolve VerifierDefaultInterface instances by name
+		var verifierDefaults []common.VerifierDefaultInterface
+		for _, vName := range dcfg.Verifiers {
+			if vd, ok := verifierDefaultMap[strings.ToLower(vName)]; ok {
+				verifierDefaults = append(verifierDefaults, vd)
+			} else {
+				logger.Debug("Default pipeline: verifier %s not found for detector %s", vName, dcfg.Name)
+			}
+		}
+
+		// Build a name → NotifierDefaultConfig map from YAML notifier configs
+		notifierYamlMap := map[string]*common.NotifierDefaultConfig{}
+		for _, ncfg := range result.Notifiers {
+			if ncfg != nil {
+				notifierYamlMap[strings.ToLower(ncfg.Name)] = ncfg
+			}
+		}
+
+		// Resolve NotifierDefault instances by name, attach thresholds from YAML config
+		var notifierCfgs []*common.NotifierDefaultConfiguration
+		for _, nName := range dcfg.Notifiers {
+			nd, ok := notifierDefaultMap[strings.ToLower(nName)]
+			if !ok {
+				logger.Debug("Default pipeline: notifier %s not found for detector %s", nName, dcfg.Name)
+				continue
+			}
+			nc := &common.NotifierDefaultConfiguration{Notifier: nd}
+			if yamlCfg, found := notifierYamlMap[strings.ToLower(nName)]; found {
+				nc.ThresholdWarning = yamlCfg.ThresholdWarning
+				nc.ThresholdAlert = yamlCfg.ThresholdAlert
+			}
+			notifierCfgs = append(notifierCfgs, nc)
+		}
+
+		opts := &detector.DefaultOptions{
+			Config:                 dcfg,
+			Triggers:               triggers,
+			Memory:                 memory,
+			ObserverDefaultConfigs: observerCfgs,
+			ObserverDefaults:       observerDefaults,
+			VerifierDefaults:       verifierDefaults,
+			NotifierDefaultConfigs: notifierCfgs,
+		}
+
+		d := detector.NewDefault(opts, obs)
+		if d != nil {
+			r = append(r, d)
+			logger.Debug("Default pipeline: detector %s registered", dcfg.Name)
+		}
+	}
+	return r
+}
+
 func getSimpleDetectors(obs *common.Observability, triggers *common.Triggers,
 	allSources *common.Sources, allObservers *common.Observers,
 	allVerifiers *common.Verifiers, allNotifiers *common.Notifiers) []common.Detector {
@@ -250,7 +394,7 @@ func getSimpleDetectors(obs *common.Observability, triggers *common.Triggers,
 
 		// find sources
 		// "Detector=Config;PubSub,="
-		sm := []common.Source{}
+		sm := []common.SourceEndpointInterface{}
 		vKeys := strings.Split(v, ";")
 
 		for _, vk := range vKeys {
@@ -390,6 +534,7 @@ func Execute() {
 			verifierMetrics := common.NewVerifierMetrics(metrics)
 
 			triggers := common.NewTriggers(&triggerOptions, obs)
+			memory := common.NewMemory(&memoryOptions, obs)
 
 			sources := common.NewSources(obs)
 			sources.Add(source.NewConfig(&sourceConfig, obs))
@@ -405,13 +550,21 @@ func Execute() {
 			verifiers.Add(verifier.NewCatchpoint(&verifierCatchpoint, obs))
 			verifiers.Add(verifier.NewHttp(&verifierHttp, obs))
 			verifiers.Add(verifier.NewQATests(&verifierQATests, obs, verifierMetrics))
+			verifiers.Add(verifier.NewPassthrough(obs))
 
 			notifiers := common.NewNotifiers(obs)
 			notifiers.Add(notifier.NewLogger(notifierLogger, obs))
 			notifiers.Add(notifier.NewSlack(notifierSlack, obs, verifierMetrics))
+			notifiers.Add(notifier.NewChatops(notifierChatops, obs, verifierMetrics))
 
 			detectors := common.NewDetectors(&detectorOptions, obs)
 			detectors.Add(getSimpleDetectors(obs, triggers, sources, observers, verifiers, notifiers)...)
+
+			// Default pipeline: load V3 YAML config and create Default detectors
+			yamlSource := source.NewYaml(&sourceYaml, obs)
+			if yamlSource != nil {
+				detectors.Add(getDefaultDetectors(obs, triggers, memory, yamlSource, observers, verifiers, notifiers)...)
+			}
 
 			detectors.Start(rootOptions.RunOnce, rootOptions.SchedulerWait, ctx)
 
@@ -441,6 +594,7 @@ func Execute() {
 	flags.StringVar(&prometheusMetricsOptions.Prefix, "prometheus-metrics-prefix", prometheusMetricsOptions.Prefix, "Prometheus metrics prefix")
 
 	flags.StringVar(&sourceConfig.Path, "source-config-path", sourceConfig.Path, "Source config path")
+	flags.StringVar(&sourceYaml.Path, "default-config-path", sourceYaml.Path, "Default pipeline V3 YAML config path (DETECTOR_DEFAULT_CONFIG_PATH)")
 
 	flags.StringVar(&sourcePubSub.Credentials, "source-pubsub-credentials", sourcePubSub.Credentials, "Source pubsub credentials")
 	flags.StringVar(&sourcePubSub.Topic, "source-pubsub-topic", sourcePubSub.Topic, "Source pubsub topic")
@@ -505,6 +659,7 @@ func Execute() {
 	flags.StringVar(&verifierHttp.URL, "verifier-http-url", verifierHttp.URL, "Verfifier http url")
 
 	flags.StringVar(&triggerOptions.TTL, "trigger-ttl", triggerOptions.TTL, "Trigger default TTL")
+	flags.StringVar(&memoryOptions.TTL, "memory-ttl", memoryOptions.TTL, "Memory TTL for pending notification entries")
 
 	flags.IntVar(&notifierSlack.SlackOptions.Timeout, "notifier-slack-timeout", notifierSlack.SlackOptions.Timeout, "Notifier slack timeout")
 	flags.BoolVar(&notifierSlack.SlackOptions.Insecure, "notifier-slack-insecure", notifierSlack.SlackOptions.Insecure, "Notifier slack insecure")
@@ -512,6 +667,13 @@ func Execute() {
 	flags.StringVar(&notifierSlack.Channel, "notifier-slack-channel", notifierSlack.Channel, "Notifier slack channel")
 	flags.StringVar(&notifierSlack.Message, "notifier-slack-message", notifierSlack.Message, "Notifier slack message")
 	flags.StringVar(&notifierSlack.Runbooks, "notifier-slack-runbooks", notifierSlack.Runbooks, "Notifier slack runbooks")
+
+	flags.StringVar(&notifierChatops.URL, "notifier-chatops-url", notifierChatops.URL, "Notifier chatops URL")
+	flags.StringVar(&notifierChatops.Bot, "notifier-chatops-bot", notifierChatops.Bot, "Notifier chatops bot name")
+	flags.StringVar(&notifierChatops.Channel, "notifier-chatops-channel", notifierChatops.Channel, "Notifier chatops channel ID")
+	flags.StringVar(&notifierChatops.UserID, "notifier-chatops-user-id", notifierChatops.UserID, "Notifier chatops user ID")
+	flags.IntVar(&notifierChatops.Timeout, "notifier-chatops-timeout", notifierChatops.Timeout, "Notifier chatops timeout")
+	flags.BoolVar(&notifierChatops.Insecure, "notifier-chatops-insecure", notifierChatops.Insecure, "Notifier chatops insecure")
 
 	flags.StringVar(&detectorSimple.Sources, "detector-simple-sources", detectorSimple.Sources, "Detector simple sources")
 	flags.StringVar(&detectorSimple.Schedules, "detector-simple-schedules", detectorSimple.Schedules, "Detector simple schedules")

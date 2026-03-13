@@ -88,7 +88,7 @@ func (cs *Config) Start(ctx context.Context) error {
 	return nil
 }
 
-func (cs *Config) Load() (*common.SourceResult, error) {
+func (cs *Config) Load() (*common.SourceEndpointResult, error) {
 
 	cs.logger.Debug("Config source is processing...")
 
@@ -104,7 +104,7 @@ func (cs *Config) Load() (*common.SourceResult, error) {
 	e := common.SourceEndpoints{}
 	e.Add(config.Endpoints...)
 
-	r := &common.SourceResult{
+	r := &common.SourceEndpointResult{
 		Endpoints: e,
 	}
 

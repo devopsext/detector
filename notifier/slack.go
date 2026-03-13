@@ -150,6 +150,84 @@ func (s *Slack) Notify(vr *common.VerifyResult) error {
 	return nil
 }
 
+// NotifyDefault implements common.NotifierDefault for the Default pipeline.
+// It renders the message template with VerifyDefaultResult as context.
+func (s *Slack) NotifyDefault(vr *common.VerifyDefaultResult) error {
+
+	if vr.IsEmpty() {
+		return errors.New("Slack notifier (Default) cannot process empty verify result")
+	}
+
+	s.logger.Debug("Slack notifier (Default) is processing...")
+
+	if s.metrics != nil {
+		s.metrics.RecordTestStartByType("notifier", "slack", "slack_api", "all")
+	}
+
+	t1 := time.Now()
+
+	b, err := s.message.RenderObject(vr)
+	if err != nil {
+		if s.metrics != nil {
+			s.metrics.RecordTestErrorByType("notifier", "slack", "slack_api", "all", "template_rendering_error", 0)
+		}
+		return err
+	}
+
+	sd := strings.TrimSpace(string(b))
+	if utils.IsEmpty(sd) {
+		return nil
+	}
+
+	opts := vendors.SlackMessageOptions{
+		Channel: s.options.Channel,
+		Text:    string(b),
+	}
+	r, err := s.client.SendMessage(opts)
+	if err != nil {
+		if s.metrics != nil {
+			s.metrics.RecordTestErrorByType("notifier", "slack", "slack_api", "all", "message_sending_error", 0)
+		}
+		return err
+	}
+
+	mr := vendors.SlackMessageResponse{}
+	if jsonErr := json.Unmarshal(r, &mr); jsonErr != nil {
+		s.message.LogError(jsonErr)
+	}
+
+	if s.runbooks != nil {
+		rb, err := s.runbooks.RenderObject(vr)
+		if err != nil {
+			s.message.LogError(err)
+		} else {
+			items := strings.Split(string(rb), "\n")
+			for _, v := range items {
+				vs := strings.TrimSpace(v)
+				if utils.IsEmpty(vs) {
+					continue
+				}
+				rbopts := vendors.SlackMessageOptions{
+					Channel: mr.Channel,
+					Thread:  mr.TS,
+					Text:    v,
+				}
+				_, err = s.client.SendMessage(rbopts)
+				if err != nil {
+					s.logger.Error(err)
+				}
+			}
+		}
+	}
+
+	if s.metrics != nil {
+		s.metrics.RecordTestSuccessByType("notifier", "slack", "slack_api", "all", float64(time.Since(t1).Seconds()))
+	}
+
+	s.logger.Debug("Slack notifier (Default) spent %s", time.Since(t1))
+	return nil
+}
+
 func (s *Slack) fIndirect(obj interface{}) interface{} {
 
 	v1 := reflect.ValueOf(obj)

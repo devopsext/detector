@@ -376,6 +376,13 @@ func (q *QATests) Verify(or *common.ObserveResult) (*common.VerifyResult, error)
 	return r, nil
 }
 
+// VerifyDefault implements common.VerifierDefaultInterface for the Default pipeline.
+// TODO: implement actual verification logic for Default pipeline.
+func (q *QATests) VerifyDefault(out *common.ObserveDefaultOutput) (*common.VerifyDefaultResult, error) {
+	q.logger.Debug("QATests.VerifyDefault: not yet implemented")
+	return &common.VerifyDefaultResult{}, nil
+}
+
 func NewQATests(options *QATestsOptions, observability *common.Observability, metrics *common.VerifierMetrics) *QATests {
 	logger := observability.Logs()
 
