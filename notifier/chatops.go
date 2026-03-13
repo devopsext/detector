@@ -235,12 +235,7 @@ func (c *Chatops) buildCommand(vr *common.VerifyDefaultResult) (string, error) {
 
 	if len(vr.Items) > 0 && vr.Items[0].Severity == "alert" {
 		item := vr.Items[0]
-		summary := buildSummaryFromLabels(item.Labels, item.Value)
-		app := item.Labels["application"]
-		if app == "" {
-			app = "unknown"
-		}
-		return fmt.Sprintf("case daily [%s] [%s]", summary, app), nil
+		return c.buildCaseDailyCommand(item), nil
 	}
 
 	data, err := json.Marshal(vr)
@@ -248,6 +243,37 @@ func (c *Chatops) buildCommand(vr *common.VerifyDefaultResult) (string, error) {
 		return "", fmt.Errorf("marshal error: %w", err)
 	}
 	return fmt.Sprintf("anomaly %s", string(data)), nil
+}
+
+func (c *Chatops) buildCaseDailyCommand(item *common.VerifyDefaultItem) string {
+
+	app := item.Labels["application"]
+	group := item.Labels["group"]
+	process := item.Labels["process"]
+
+	summary := "availability degradation :arrow_down_red:"
+	if !isEmptyLabel(app) {
+		summary = fmt.Sprintf("%s availability degradation :arrow_down_red:", app)
+	}
+
+	var parts []string
+	parts = append(parts, fmt.Sprintf("case daily [%s]", summary))
+
+	if !isEmptyLabel(app) {
+		parts = append(parts, fmt.Sprintf("[%s]", app))
+	}
+
+	if !isEmptyLabel(group) {
+		parts = append(parts, group)
+	}
+
+	if !isEmptyLabel(process) {
+		parts = append(parts, fmt.Sprintf("[bp:%s]", process))
+	}
+
+	cmd := strings.Join(parts, " ")
+	c.logger.Debug("Chatops built case daily command: %s", cmd)
+	return cmd
 }
 
 func isEmptyLabel(v string) bool {
