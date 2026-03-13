@@ -26,7 +26,7 @@ func (rd *Random) Name() string {
 	return ObserverRandomName
 }
 
-func (rd *Random) Observe(sr *common.SourceResult) (*common.ObserveResult, error) {
+func (rd *Random) Observe(sr *common.SourceEndpointResult) (*common.ObserveResult, error) {
 
 	if sr.Endpoints.IsEmpty() {
 		return nil, errors.New("Random observer cannot process empty endpoints")

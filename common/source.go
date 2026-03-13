@@ -26,19 +26,19 @@ type SourceEndpoints struct {
 	items []*SourceEndpoint
 }
 
-type SourceResult struct {
+type SourceEndpointResult struct {
 	Endpoints SourceEndpoints
 }
 
-type Source interface {
+type SourceEndpointInterface interface {
 	Name() string
 	Start(ctx context.Context) error
-	Load() (*SourceResult, error)
+	Load() (*SourceEndpointResult, error)
 }
 
 type Sources struct {
 	logger sreCommon.Logger
-	items  []Source
+	items  []SourceEndpointInterface
 }
 
 func CheckSourceEndpoints(es []*SourceEndpoint) []*SourceEndpoint {
@@ -188,7 +188,7 @@ func (ses *SourceEndpoints) Reduce() SourceEndpoints {
 
 // Sources
 
-func (ss *Sources) Add(s Source) {
+func (ss *Sources) Add(s SourceEndpointInterface) {
 
 	if utils.IsEmpty(s) {
 		return
@@ -196,11 +196,11 @@ func (ss *Sources) Add(s Source) {
 	ss.items = append(ss.items, s)
 }
 
-func (ss *Sources) Items() []Source {
+func (ss *Sources) Items() []SourceEndpointInterface {
 	return ss.items
 }
 
-func (ss *Sources) FindByName(name string) Source {
+func (ss *Sources) FindByName(name string) SourceEndpointInterface {
 
 	for _, s := range ss.items {
 

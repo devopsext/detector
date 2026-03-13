@@ -17,7 +17,7 @@ type SimpleOptions struct {
 	Schedule               string
 	Countries              []string
 	Triggers               *common.Triggers
-	Sources                []common.Source
+	Sources                []common.SourceEndpointInterface
 	ObserverConfigurations []*common.ObserverConfiguration
 	VerifierConfigurations []*common.VerifierConfiguration
 	NotifierConfigurations []*common.NotifierConfiguration
@@ -46,7 +46,7 @@ func (a *Simple) Schedule() string {
 	return a.options.Schedule
 }
 
-func (a *Simple) load() ([]*common.SourceResult, error) {
+func (a *Simple) load() ([]*common.SourceEndpointResult, error) {
 
 	items := a.options.Sources
 	if len(items) == 0 {
@@ -70,7 +70,7 @@ func (a *Simple) load() ([]*common.SourceResult, error) {
 				return nil
 			}
 
-			r := &common.SourceResult{}
+			r := &common.SourceEndpointResult{}
 
 			for _, e := range sr.Endpoints.Items() {
 
@@ -111,10 +111,10 @@ func (a *Simple) load() ([]*common.SourceResult, error) {
 		return nil, err
 	}
 
-	r := []*common.SourceResult{}
+	r := []*common.SourceEndpointResult{}
 	m.Range(func(key, value any) bool {
 
-		e, ok := value.(*common.SourceResult)
+		e, ok := value.(*common.SourceEndpointResult)
 		if !ok {
 			return false
 		}
@@ -124,7 +124,7 @@ func (a *Simple) load() ([]*common.SourceResult, error) {
 	return r, nil
 }
 
-func (a *Simple) observe(sr *common.SourceResult) ([]*common.ObserveResult, error) {
+func (a *Simple) observe(sr *common.SourceEndpointResult) ([]*common.ObserveResult, error) {
 
 	items := a.options.ObserverConfigurations
 	if len(items) == 0 {
@@ -349,7 +349,7 @@ func (a *Simple) notify(vr *common.VerifyResult) error {
 	return g.Wait()
 }
 
-func (a *Simple) mergeSourceResults(srs []*common.SourceResult) *common.SourceResult {
+func (a *Simple) mergeSourceResults(srs []*common.SourceEndpointResult) *common.SourceEndpointResult {
 
 	eps := common.SourceEndpoints{}
 
@@ -367,7 +367,7 @@ func (a *Simple) mergeSourceResults(srs []*common.SourceResult) *common.SourceRe
 		return nil
 	}
 
-	return &common.SourceResult{
+	return &common.SourceEndpointResult{
 		Endpoints: r,
 	}
 }
@@ -507,7 +507,7 @@ func (a *Simple) Start(ctx context.Context) {
 	}
 }
 
-func (a *Simple) tryLoad() (*common.SourceResult, error) {
+func (a *Simple) tryLoad() (*common.SourceEndpointResult, error) {
 
 	a.logger.Debug("Simple %s detector is loading...", a.options.Name)
 	t1 := time.Now()
@@ -533,7 +533,7 @@ func (a *Simple) tryLoad() (*common.SourceResult, error) {
 	return sr, nil
 }
 
-func (a *Simple) tryObserve(sr *common.SourceResult) (*common.ObserveResult, error) {
+func (a *Simple) tryObserve(sr *common.SourceEndpointResult) (*common.ObserveResult, error) {
 
 	a.logger.Debug("Simple %s detector is observing...", a.options.Name)
 	t2 := time.Now()

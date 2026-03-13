@@ -236,7 +236,7 @@ func (ps *PubSub) Start(ctx context.Context) error {
 	return nil
 }
 
-func (ps *PubSub) Load() (*common.SourceResult, error) {
+func (ps *PubSub) Load() (*common.SourceEndpointResult, error) {
 
 	es := common.SourceEndpoints{}
 
@@ -250,7 +250,7 @@ func (ps *PubSub) Load() (*common.SourceResult, error) {
 		return true
 	})
 
-	r := &common.SourceResult{
+	r := &common.SourceEndpointResult{
 		Endpoints: es,
 	}
 	return r, nil

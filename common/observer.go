@@ -36,7 +36,29 @@ type ObserveResult struct {
 
 type Observer interface {
 	Name() string
-	Observe(sr *SourceResult) (*ObserveResult, error)
+	Observe(sr *SourceEndpointResult) (*ObserveResult, error)
+}
+
+// ObserveDefaultItem is a single result entry from a label-grouped Default pipeline observation.
+type ObserveDefaultItem struct {
+	Labels map[string]string
+	Value  float64
+}
+
+// ObserveDefaultOutput is the result returned by ObserverDefault.ObserveDefault().
+type ObserveDefaultOutput struct {
+	Items []*ObserveDefaultItem
+}
+
+func (o *ObserveDefaultOutput) IsEmpty() bool {
+	return len(o.Items) == 0
+}
+
+// ObserverDefault is the interface for observers that support the Default pipeline.
+// They receive a ready-made query from the V3 config and return label-grouped results.
+type ObserverDefault interface {
+	Name() string
+	ObserveDefault(cfg *ObserverConfig) (*ObserveDefaultOutput, error)
 }
 
 type Observers struct {

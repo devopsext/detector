@@ -376,6 +376,14 @@ func (c *Catchpoint) processInstantTestResultSummary(oe *common.ObserveEndpoint,
 			sm = []summary{}
 		}
 
+		// Guard against nil TestResult or nil nested fields before dereferencing
+		if r.Data.InstantTestRecord.TestResult == nil ||
+			r.Data.InstantTestRecord.TestResult.Hosts.Fields == nil ||
+			r.Data.InstantTestRecord.TestResult.Hosts.Metrics == nil {
+			c.logger.Debug("Catchpoint verifier. processInstantTestResultSummary. Skipping result for country %s — TestResult or Hosts fields are nil", country)
+			continue
+		}
+
 		for _, i := range *r.Data.InstantTestRecord.TestResult.Hosts.Fields {
 			if i.Name == "% Availability" {
 				avbIndex = i.Index
@@ -420,6 +428,11 @@ func (c *Catchpoint) processInstantTestResultSummary(oe *common.ObserveEndpoint,
 				}
 			}
 
+		}
+
+		if Availability == nil {
+			c.logger.Debug("Catchpoint processInstantTestResultSummary: No availability found for country %s, node %s — skipping", country, r.Data.InstantTestRecord.Node.Name)
+			continue
 		}
 
 		c.logger.Debug("Catchpoint processInstantTestResultSummary: Node data - Country: %s, Node: %s, Availability: %.2f, Flags: %v",
@@ -513,10 +526,6 @@ func (c *Catchpoint) Verify(or *common.ObserveResult) (*common.VerifyResult, err
 
 			c.logger.Debug("Catchpoint verifier checked %s endpoint %s in %s in %s", scheme, uri, countries, time.Since(t1))
 
-			if err != nil {
-				return fmt.Errorf("Catchpoint verifier has error: %s", err)
-			}
-
 			if rr == nil {
 				return nil
 			}
@@ -548,7 +557,7 @@ func (c *Catchpoint) Verify(or *common.ObserveResult) (*common.VerifyResult, err
 					c.metrics.RecordTestResult(c.Name(), domain, normalizedCountry, r.Avg, 0)
 				}
 			}
-			m.Store(nil, ve)
+			m.Store(uri, ve)
 			return nil
 		})
 	}

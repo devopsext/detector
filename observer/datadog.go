@@ -248,6 +248,108 @@ func (d *Datadog) timeseriesV2ToData(resp *datadogV2.TimeseriesFormulaQueryRespo
 	return r
 }
 
+// datadogRawSeries holds the raw timeseries summary with all group tags as a map.
+type datadogRawSeries struct {
+	tags map[string]string
+	Avg  float64
+}
+
+// timeseriesV2ToRaw converts a V2 timeseries response into raw label-keyed series.
+// Unlike timeseriesV2ToData, it does NOT require specific URI/country tags — it captures all group tags.
+func (d *Datadog) timeseriesV2ToRaw(resp *datadogV2.TimeseriesFormulaQueryResponse) []*datadogRawSeries {
+
+	r := []*datadogRawSeries{}
+
+	tr := resp.GetData()
+	series := tr.Attributes.GetSeries()
+	values := tr.Attributes.GetValues()
+
+	if len(series) != len(values) {
+		return r
+	}
+
+	for idx, s := range series {
+
+		v := values[idx]
+		if len(v) == 0 {
+			continue
+		}
+
+		count := 0
+		sum := float64(0.0)
+
+		for _, p := range v {
+			if p == nil {
+				continue
+			}
+			count++
+			sum += *p
+		}
+
+		if count == 0 {
+			continue
+		}
+
+		// Parse all group tags into a map
+		tags := make(map[string]string)
+		for _, tagStr := range s.GroupTags {
+			parts := strings.SplitN(tagStr, ":", 2)
+			if len(parts) == 2 {
+				tags[strings.TrimSpace(parts[0])] = strings.TrimSpace(parts[1])
+			}
+		}
+
+		r = append(r, &datadogRawSeries{
+			tags: tags,
+			Avg:  sum / float64(count),
+		})
+	}
+	return r
+}
+
+// getV2TimeseriesRaw fetches timeseries data and returns raw label-keyed series.
+// Used by ObserveDefault for the Default pipeline.
+func (d *Datadog) getV2TimeseriesRaw(query string, from, to time.Time) ([]*datadogRawSeries, error) {
+
+	t1 := from.UnixMilli()
+	t2 := to.UnixMilli()
+
+	name := "a"
+	squery := datadogV2.TimeseriesQuery{
+		MetricsTimeseriesQuery: &datadogV2.MetricsTimeseriesQuery{
+			Name:       &name,
+			DataSource: datadogV2.METRICSDATASOURCE_METRICS,
+			Query:      query,
+		},
+	}
+
+	body := datadogV2.TimeseriesFormulaQueryRequest{
+		Data: datadogV2.TimeseriesFormulaRequest{
+			Attributes: datadogV2.TimeseriesFormulaRequestAttributes{
+				From:    t1,
+				To:      t2,
+				Queries: []datadogV2.TimeseriesQuery{squery},
+			},
+			Type: datadogV2.TIMESERIESFORMULAREQUESTTYPE_TIMESERIES_REQUEST,
+		},
+	}
+
+	resp, _, err := d.apiV2.QueryTimeseriesData(d.ctx, body)
+	if err != nil {
+		return nil, err
+	}
+
+	if resp.HasErrors() {
+		return nil, errors.New(*resp.Errors)
+	}
+
+	if !resp.HasData() {
+		return nil, nil
+	}
+
+	return d.timeseriesV2ToRaw(&resp), nil
+}
+
 func (d *Datadog) getV2Timeseries(query string, from, to time.Time, tagUri, tagCountry string) (DatadogMetricData, error) {
 
 	t1 := from.UnixMilli()
@@ -328,7 +430,7 @@ func (d *Datadog) firstURIbyCountry(md DatadogMetricData, uri, country string) *
 	return nil
 }
 
-func (d *Datadog) buildQuery(sr *common.SourceResult, query, tagUri string) string {
+func (d *Datadog) buildQuery(sr *common.SourceEndpointResult, query, tagUri string) string {
 
 	from := ""
 	for _, e := range sr.Endpoints.Items() {
@@ -354,7 +456,7 @@ func (d *Datadog) buildQuery(sr *common.SourceResult, query, tagUri string) stri
 	return fmt.Sprintf(query, from)
 }
 
-func (d *Datadog) Observe(sr *common.SourceResult) (*common.ObserveResult, error) {
+func (d *Datadog) Observe(sr *common.SourceEndpointResult) (*common.ObserveResult, error) {
 
 	if sr.Endpoints.IsEmpty() {
 		return nil, errors.New("Datadog observer cannot process empty endpoints")
@@ -478,6 +580,49 @@ func (d *Datadog) Observe(sr *common.SourceResult) (*common.ObserveResult, error
 	// Здесь больше не логируем метрики для каждого домена/страны
 
 	return r, nil
+}
+
+// ObserveDefault implements common.ObserverDefault for the Default pipeline.
+// It uses a pre-built query from ObserverConfig instead of building it from endpoint URIs.
+func (d *Datadog) ObserveDefault(cfg *common.ObserverConfig) (*common.ObserveDefaultOutput, error) {
+
+	if utils.IsEmpty(cfg.QueryDatadog) {
+		return nil, fmt.Errorf("Datadog observer has no query_datadog in config %s", cfg.Name)
+	}
+
+	d.logger.Debug("Datadog observer (Default) is processing query: %s", cfg.QueryDatadog)
+
+	from, to, err := d.getFromTo(d.options.Duration)
+	if err != nil {
+		return nil, err
+	}
+	d.logger.Debug("Datadog observer (Default) interval %d <=> %d", from.UnixMilli(), to.UnixMilli())
+
+	md, err := d.getV2TimeseriesRaw(cfg.QueryDatadog, *from, *to)
+	if err != nil {
+		return nil, err
+	}
+
+	if len(md) == 0 {
+		d.logger.Debug("Datadog observer (Default) found no metrics for query: %s", cfg.QueryDatadog)
+		return nil, nil
+	}
+
+	out := &common.ObserveDefaultOutput{}
+	for _, m := range md {
+		// Build a labels map from all tag key:value pairs in the series
+		labels := make(map[string]string)
+		for k, v := range m.tags {
+			labels[k] = v
+		}
+		out.Items = append(out.Items, &common.ObserveDefaultItem{
+			Labels: labels,
+			Value:  m.Avg,
+		})
+	}
+
+	d.logger.Debug("Datadog observer (Default) found %d series", len(out.Items))
+	return out, nil
 }
 
 func NewDatadog(options *DatadogOptions, observability *common.Observability, metrics *common.VerifierMetrics) *Datadog {

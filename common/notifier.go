@@ -17,6 +17,12 @@ type Notifier interface {
 	Notify(vr *VerifyResult) error
 }
 
+// NotifierDefault is the interface for notifiers that support the Default pipeline.
+type NotifierDefault interface {
+	Name() string
+	NotifyDefault(vr *VerifyDefaultResult) error
+}
+
 type Notifiers struct {
 	logger sreCommon.Logger
 	items  []Notifier
@@ -25,6 +31,25 @@ type Notifiers struct {
 type NotifierConfiguration struct {
 	Notifier    Notifier
 	Probability NotifierProbability
+}
+
+type NotifyDefaultTrackingItem struct {
+	ItemIndex int
+	MessageID string
+}
+
+// NotifierDefaultTrackable extends NotifierDefault with message tracking and status checking.
+type NotifierDefaultTrackable interface {
+	NotifierDefault
+	NotifyDefaultWithTracking(vr *VerifyDefaultResult) ([]*NotifyDefaultTrackingItem, error)
+	CheckMessageStatus(id string) (string, error)
+}
+
+// NotifierDefaultConfiguration wraps a NotifierDefault for use in the Default pipeline.
+type NotifierDefaultConfiguration struct {
+	Notifier         NotifierDefault
+	ThresholdWarning float64
+	ThresholdAlert   float64
 }
 
 func (ns *Notifiers) Add(n Notifier) {
